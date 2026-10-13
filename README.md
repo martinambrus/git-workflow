@@ -71,7 +71,7 @@ Verified through a full release cycle: MR merged, tag `v1.1.0`, Packeton indexed
 developed the change (`shop-a`) `composer update` moved only `composer.lock` and Composer's vendor metadata, the module
 folder stayed identical (plan 9.3) and the Upstream job then reported no drift; on `shop-b` the diff was exactly the
 release (5 module files), `drush updb`/`cr` were clean, and the new "Promo badge" field appeared in the admin form.
-Not yet verified: customer limits (plan 10), HTTPS, external reachability.
+Everything in plan 14.4 has now been exercised except real internet exposure (see "External customers" below).
 
 5. **`drupal/recommended-project` ships no `.gitignore`**, so Drupal's runtime `web/sites/default/files/` would be
    committed (twig cache, `.htaccess` files). The projects add `web/sites/default/files/` and nothing else
@@ -182,6 +182,34 @@ installs from Packeton into a real project (`composer require activit/ait_banner
     queued runs wait; push and PR events both fire for a PR branch. Fine for a pilot, size the runners accordingly.
 15. Branch protection status contexts are named `<workflow> / <job> (<event>)`, here `checks / checks (pull_request)`;
     they only exist after the first run, so the stub must be on `main` before the rule can be meaningfully required.
+
+## External customers (plan section 10) and Packeton housekeeping
+
+`./lab external up` starts `ext-proxy` (nginx, TLS from mkcert) on a **separate Docker network `wf-ext`**; the proxy is
+the only thing on that network that reaches Packeton. `./lab external test` creates a Unipo-like customer (group
+`unipo`, grant `activit/ait_banners` `<1.1`) and installs from a container that can reach nothing but
+`https://packeton-ext.test`.
+
+Verified: from the customer network Gitea and Packeton's internal address are unreachable (`000`) while the proxy
+answers `200`; anonymous requests get `401`; the customer installs `v1.0.1` as a dist zip over HTTPS with only the
+mkcert CA trusted and **cannot** resolve `^1.1` ("found [v1.0.0, v1.0.1] but it does not match the constraint");
+dist URLs carry the external scheme and host (`https://packeton-ext.test/zipball/...`, Packeton honours the
+`X-Forwarded-*` headers); lifting the version limit shows all releases; a group/user `expiredUpdatesAt` of
+2026-10-10 with 1.0.x back-dated before it and 1.1+ after it left the customer on exactly `v1.0.0 v1.0.1`, and
+moving the date forward restored everything (the freeze of plan section 10).
+
+16. **Packeton leaks the internal Gitea clone URL to customers** as `source.url` in every package's metadata, and has
+    no setting to hide it. Harmless for dist installs, but it discloses the internal hostname. The lab's proxy rewrites
+    it (`sub_filter` to `git.internal.invalid`); in production either do the same or use an internal-only hostname.
+17. **Expiry has two meanings**: `expiredUpdatesAt` freezes the customer on what was released before the date (the
+    plan's behaviour); a user's `expireAt` is an account expiry that locks them out entirely. Pick deliberately.
+18. **Packeton never drops vanished branches**: after a branch is deleted its `dev-...` version stays until
+    `packagist:update <pkg> --delete-before`. `./lab prune` deletes branches without an open PR in all repos and runs
+    that update for registered packages (the effect shows after a few seconds). Repos are also set to "delete branch
+    after merge" by default, but merges through the API must pass `delete_branch_after_merge`.
+19. Packeton lists pre-release tags (`v1.2.0-rc.1`) in its stable metadata; customers only get them when their
+    `minimum-stability` allows it. The Release job opens no update PRs for them.
+20. Not verified (cannot be locally): real internet exposure, a publicly trusted certificate, rate limits.
 
 ## Browser checks (optional)
 

@@ -30,9 +30,12 @@ grep -vE '^\s*(#|$)' "$MANIFEST" | while read -r kind name src _; do
   if [ "$kind" = project ]; then
     # opt in to update pull requests (plan 9): every lab project carries the topic
     api PUT "/repos/$org/$name/topics/activit-project" >/dev/null
+    api PATCH "/repos/$org/$name" '{"default_delete_branch_after_merge":true}' >/dev/null
   fi
   if [ "$kind" = module ]; then
     ensure_tag_protection "$org" "$name"
+    # merged bot branches (up/...) are removed; Packeton keeps their dev- versions until a --delete-before update
+    api PATCH "/repos/$org/$name" '{"default_delete_branch_after_merge":true}' >/dev/null
     seed_repo "$org" "$name" "$LAB_ROOT/seed/modules/$name" "$LAB_ROOT/seed/module-template"
     ensure_pkg_hook "$name"
     register_package "$name"

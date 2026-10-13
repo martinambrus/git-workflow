@@ -63,6 +63,22 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
     networks: [default]
 
+  # TLS front for Packeton, the only bridge into the separate "customer" network (profile: external).
+  ext-proxy:
+    image: nginx:1.27-alpine
+    profiles: [external]
+    restart: unless-stopped
+    depends_on: [packeton]
+    volumes:
+      - ./external/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./.state/ext-certs:/certs:ro
+    ports:
+      - "127.0.0.1:443:443"
+    networks:
+      default: {}
+      ext:
+        aliases: [packeton-ext.test]
+
   # Only built, never run as a service: the image every Actions job (and bin/composer) uses.
   runner-image:
     image: activit-runner:local
@@ -77,3 +93,6 @@ volumes:
 networks:
   default:
     name: wf-net
+  # "outside world": customers live here and can reach only ext-proxy, never Gitea or Packeton directly
+  ext:
+    name: wf-ext

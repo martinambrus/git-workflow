@@ -19,6 +19,8 @@ case $cmd in
             [ "$a" = y ] && { dc --profile build down -v; rm -rf "$OPS/.state" "$OPS/.env"; echo "destroyed. Local clones in modules/ and projects/ are kept; delete them by hand."; } ;;
   reset)    "$0" destroy && "$0" up ;;
   site)     "$ROOT/ops/bin/site-up.sh" "${1:-all}" ;;
+  external) "$ROOT/ops/bin/external.sh" "${1:-up}" ;;
+  prune)    "$ROOT/ops/bin/prune.sh" ;;
   smoke)    "$ROOT/ops/bin/smoke.sh" "$@" ;;
   composer) # composer inside the runner image, on the lab network, with Packeton credentials preloaded
             load_secrets; mkdir -p "$STATE/composer-home"
@@ -33,6 +35,8 @@ case $cmd in
 ./lab hosts     add gitea.test / packeton.test to /etc/hosts (needs sudo, once)
 ./lab status    containers + name resolution
 ./lab site [name]  start DDEV site(s); installs from committed config/sync if there is no database yet
+./lab external [up|test]  TLS proxy for the customer-facing Packeton + a Unipo-like customer test
+./lab prune     delete branches without an open PR, make Packeton drop their dev- versions
 ./lab smoke     end-to-end self-test of the stack (repo, tag, webhook, Actions job, composer)
 ./lab composer  run Composer (PHP 8.3 image on the lab network; no PHP needed on the host)
 ./lab logs [svc]  follow logs;  ./lab down  stop;  ./lab destroy  delete all lab data;  ./lab reset  destroy + up
