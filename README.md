@@ -80,6 +80,14 @@ Update PRs, Checks, protected branches, Packeton grants). 68 assertions:
 33. A `2.x` fix developed in a client lands on the `2.x` branch only; **forward-porting to `main` is not automated**
     (the plan mentions it as a manual follow-up).
 
+34. **One unexplained intermittent failure.** Of the full from-scratch runs with these scenarios, one (the 2nd) failed
+    in the release-line part: the `new` client's migration PR to 2.0 failed immediately (instant failure, not a
+    Checks timeout) and the lock read for that repo came back empty. The identical commit then passed in 6 further runs
+    (4 on a live lab, 2 from scratch). The likely class is Gitea's asynchronous handling of a repository that was
+    created and pushed seconds earlier (as findings 25 and 27), but this was not proven. The harness now retries lock
+    reads, states *why* a project change failed, and leaves the disposable repos in place on failure so the next
+    occurrence can be diagnosed. If you hit it, re-run `./lab e2e lines` and open an issue with the printed reason.
+
 ## Fresh-machine replay (verified)
 
 Done from a plain `git clone` of this repository on a machine that had been wiped of every lab container, volume,
