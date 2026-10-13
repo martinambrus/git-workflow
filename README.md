@@ -100,6 +100,11 @@ of a project from Gitea needs `ddev start && ddev drush si` or a database; only 
 `activit/ait_banners` repository and tags `v1.0.0` (this is the already-fixed code, i.e. what was `v1.0.1` in the
 first run). After that, the module lives in Gitea and `modules/ait_banners` is its working clone.
 
+## Browser checks (optional)
+
+`.claude/mcp_settings.json` configures the Chrome DevTools MCP server (`npx chrome-devtools-mcp`) so Claude Code can
+open the DDEV sites, click through the Drupal admin and take screenshots. Needs Node.js and a stable Chrome.
+
 ## Layout
 
 ```
