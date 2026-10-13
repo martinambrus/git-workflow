@@ -99,6 +99,9 @@ ddev_composer_auth() { load_secrets
 # ensure_main_protection ORG NAME -> plan 2.1: main takes merge requests only, and the Checks job must pass.
 # Applies to admins too (otherwise the main dev could push straight to main).
 ensure_main_protection() { local org=$1 name=$2
+  # An empty repo has no main yet and its first commit must be pushable: protect once main exists
+  # (new-drupal-project.sh calls this after the initial push; ./lab sync re-applies it).
+  [ "$(http_code GET "/repos/$org/$name/branches/main")" = 200 ] || { echo "   (no main branch yet: protection applied after the first push)"; return 0; }
   local body='{"rule_name":"main","enable_push":false,"enable_status_check":true,"status_check_contexts":["checks / checks (pull_request)"],"required_approvals":0,"apply_to_admins":true}'
   if [ "$(http_code GET "/repos/$org/$name/branch_protections/main")" = 200 ]; then
     api PATCH "/repos/$org/$name/branch_protections/main" "$body" >/dev/null

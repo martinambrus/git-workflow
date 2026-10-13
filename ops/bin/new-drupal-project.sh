@@ -73,4 +73,5 @@ printf '%s\n' "web/sites/default/files/" > .gitignore
 git add -A
 git commit -qm "Initial project: Drupal 11, Packeton repository, activit/ait_banners, vendor and web committed"
 git push -u origin main 2>&1 | grep -v '^remote:' | tail -2
+ensure_main_protection "$SITE_ORG" "$name"      # only now: the first push had to be possible
 echo "$name ready: $(ddev describe -j | jq -r .raw.httpsurl)"
