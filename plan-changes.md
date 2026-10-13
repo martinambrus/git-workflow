@@ -31,6 +31,8 @@ Legend: **FIX** the plan is wrong or fails as written · **ADD** missing rule or
 | 18 | 11 ("client-only change", first choice) | **OK** + note | Extension module in the project verified; one Drupal gotcha worth documenting | F21 |
 | 19 | 7.1, 3 | **CLARIFY** | A fresh clone has no database: `drush si --existing-config` rebuilds from committed config | README "Drupal projects" |
 | 20 | 14.4, 14.5 | **FIX** | Update the status lists: what is confirmed, what changed, what is built | section 4 below |
+| 21 | 2.3, 12 | **ADD** | `ddev` (and anything that wraps it) hangs silently on an inherited open stdin in unattended runs: close stdin in scripts/CI | F35 |
+| 22 | 4.3, 4.4, 12 | **ADD** | After a first push Gitea lags in more than one way (branch record, repository `empty` flag): never read or protect a repo immediately | F25, F27, F34 |
 
 ## 2. Details by plan section
 
@@ -80,6 +82,11 @@ stale cache and **exits 0**; `composer update` then reports "Nothing to modify" 
 **9. DDEV credentials are per project (ADD, 2.3).** DDEV's `composer config --global` is stored per project container,
 so the Packeton token must be set in every project, not once per machine. *Evidence:* F9.
 
+**21. Unattended `ddev` (ADD, 2.3 and CI notes).** `ddev composer ...` launched with stdin as an open pipe or socket that
+never sends data (CI runners, `ssh host cmd`, IDE tasks, `xargs`) blocks for ever **without printing anything**; with
+`</dev/null` the same command finishes in seconds. Interactive terminals are not affected, so it only shows up in
+automation. Any script or pipeline that drives DDEV must close stdin. *Evidence:* F35.
+
 **19 (part). Developer onboarding (CLARIFY, 7.1).** "A plain git clone is all a developer needs" is true for code, but
 the **database is not in Git**. Document `drush si --existing-config` (rebuilds the site from the committed
 `config/sync`; content is not preserved) or whatever dump process the team uses.
@@ -98,7 +105,10 @@ latter lazily, after the scaffold's commit, and would leave the tree dirty), a c
 **9. Order and timing (CLARIFY, 4.3/4.4).** Registering a package **after** its first tag was pushed works
 (registration indexes existing tags), but the webhook only fires for registered packages, so "register, then tag" is
 the clean order. A just-pushed branch is not visible to Gitea's API/raw-file endpoints for a few seconds; scripts
-must wait for `main` before registering or protecting. *Evidence:* F6, F25, F27.
+must wait for `main` before registering or protecting. The lag has **two** parts: the branch record and the
+repository's `empty` flag; the raw-file API kept answering "repository is empty" for well over 18 seconds after a push
+under CI load. Any automation that reads or protects a repository right after its first push must wait for both
+(`GET /repos/<r>` reports `"empty": false`). *Evidence:* F6, F25, F27, F34.
 
 **CLARIFY (4.2).** `export-ignore` is honoured by Packeton's archives (verified: no `tests/`, `.gitea/`,
 `.gitattributes` in the installed package; no false drift against `git archive` of the tag). Keep the `.gitattributes`
