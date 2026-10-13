@@ -18,7 +18,8 @@ git clone https://github.com/martinambrus/git-workflow.git && cd git-workflow
 
 `./lab e2e` is the proof that everything works on your machine (measured here after `./lab up`: about 4.5 minutes with
 warm Docker/Composer caches; expect longer on a cold machine, mostly Composer and the CI reinstalls). It prints PASS/FAIL per step and exits non-zero on any failure. It is re-runnable on a
-used lab: each run releases the next patch version. `./lab e2e --quick` skips the smoke and customer tests.
+used lab: each run releases the next patch version. `./lab e2e --quick` skips the smoke, customer and release-line tests; `./lab e2e lines` runs only the release-line
+scenarios (about 3 minutes on a warm lab).
 `./lab destroy -y` wipes everything (including DDEV sites and local clones) for a from-scratch run.
 
 | What | URL | Login |
@@ -46,6 +47,38 @@ opted-in project; the Checks job gates `main`. Everything from section 14.4 of t
 has been exercised (see the findings below). The numbered findings tell the story of the pilot run (releases 1.0.1 to
 1.1.2, `shop-b` frozen at 1.1.1); a fresh lab starts from the **latest** module code tagged `v1.0.0`, so versions in
 the findings differ from what you see on a replay.
+
+## Release lines and client variants (verified by `./lab e2e lines`)
+
+Run on disposable, uniquely named modules and minimal Composer projects (not shop-a/shop-b), so the version-line
+logic is isolated and the scenario is re-runnable; everything goes through the real pipeline (Upstream, Release,
+Update PRs, Checks, protected branches, Packeton grants). 68 assertions:
+
+| Variant | Expected and verified |
+| --- | --- |
+| `2.0.0` (breaking) released on `main`, `1.x` cut from the last 1.x tag | the Release job succeeds and opens **no** update PR in any project on `^1.0`, nor in an opted-out or pinned one |
+| Shared **extension package** (own repo, own Packeton package) requiring the base `^1.0` | `composer require base:^2.0` is refused because of the extension; the extension's own `2.0.0` needs base `^2.0`; the client then moves both together in one PR |
+| Client deliberately moves to 2.x | by `composer require ^2.0` through a PR; stays on 1.0.1 until then |
+| In-place fix by a client locked to 1.x | the Upstream MR targets the **`1.x`** branch (not `main`), module Checks run on that PR, tag `v1.0.2` is placed on `1.x`, update PRs reach only 1.x clients that opted in |
+| Client whose support expired (no `activit-project` topic) / client pinned to exactly `1.0.1` | no update PRs for 1.x or 2.x releases |
+| External customer, grant `<2.0`, `expiredUpdatesAt` in the past | sees exactly the releases from before the date; no 1.0.2, no 2.0.0; `composer` resolves the newest allowed; cannot resolve `^2.0`; anonymous: 401 |
+| Same customer **re-subscribes** (grant widened, expiry cleared) | now sees 1.0.2 and 2.0.0; `composer update` stays on 1.x because the constraint is still `^1.0`; moves to 2.0 only by a deliberate `require ^2.0` |
+| Internal client re-subscribes (topic added back) | receives the next 1.x patch release, then migrates to 2.0; its next in-place edit targets the **`2.x`** branch; a `2.0.1` tagged on `2.x` reaches every opted-in 2.x client |
+
+29. **Real bug in the Upstream job since `v1.0.0`, found by this scenario:** the bot branch was cut from the module
+    repository's *current default branch* instead of the locked tag (the script said "cut from the tag"). It only
+    worked while `main` still equalled the tag; once `main` moved to 2.0.0 a project on 1.x could not send a fix
+    (`patch does not apply`). Fixed in `ci-tools` **v1.3.1**; bump `upstream.yml` in existing projects.
+30. The plan's rule "1.x if that branch exists, otherwise main" generalises to **`<locked major>.x` if it exists**;
+    verified for both `1.x` and `2.x`.
+31. **Maintenance branches are not protected automatically**: `./lab sync` protects `main` only. A real release line
+    needs the same rule (PR only, Checks required) on `1.x`/`2.x`; the scenario creates it explicitly. Plan section 11
+    should say so. The module `checks.yml` already triggers on PRs into `*.x`.
+32. **Re-subscription is two separate decisions**: widening the grant (Packeton) lets the client *see* 2.x, but
+    nothing moves until the project's constraint changes; and a client on 1.x keeps receiving 1.x fixes only. That is
+    the behaviour the plan wants, but it means "re-subscribing" needs an explicit migration PR on the client side.
+33. A `2.x` fix developed in a client lands on the `2.x` branch only; **forward-porting to `main` is not automated**
+    (the plan mentions it as a manual follow-up).
 
 ## Fresh-machine replay (verified)
 
