@@ -50,7 +50,8 @@ case $cmd in
 ./lab site [name]  start DDEV site(s); installs from committed config/sync if there is no database yet
 ./lab external [up|test]  TLS proxy for the customer-facing Packeton + a Unipo-like customer test
 ./lab prune     delete branches without an open PR, make Packeton drop their dev- versions
-./lab e2e [--quick]  the WHOLE workflow with assertions (scaffolds the sites if missing); re-runnable
+./lab e2e [--quick|lines]  the WHOLE workflow with assertions (scaffolds the sites if missing); re-runnable;
+                'lines' = only the release-line scenarios (2.0.0, 1.x/2.x branches, extension package, customers)
 ./lab smoke     self-test of the stack only (repo, tag, webhook, Actions job, composer)
 ./lab composer  run Composer (PHP 8.3 image on the lab network; no PHP needed on the host)
 ./lab logs [svc]  follow logs;  ./lab down  stop;  ./lab destroy [-y]  delete ALL lab data;  ./lab reset  destroy + up

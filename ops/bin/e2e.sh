@@ -3,40 +3,18 @@
 # free patch version of ait_banners.
 #
 #   ./lab e2e            full flow (scaffolds the projects first if they do not exist)
-#   ./lab e2e --quick    skip the smoke test and the external-customer test
+#   ./lab e2e --quick    skip the smoke test, the external-customer test and the release-line scenarios
+#   ./lab e2e lines      only the release-line scenarios (2.0.0, 1.x/2.x branches, extension package, customers)
 #
 # What it proves: sites render -> in-place edit in shop-a -> Upstream MR in the module repo -> module Checks -> merge
 # -> tag as main dev -> Release job -> update PRs in both projects (by bot) -> project Checks -> merge -> both
 # projects locked to the new version and carrying the edit -> database rebuilt from committed config.
 set -uo pipefail
 . "$(dirname "$0")/lib.sh"
+[ "${1:-}" = lines ] && exec "$(dirname "$0")/e2e-lines.sh"
 QUICK=0; [ "${1:-}" = --quick ] && QUICK=1
 
-PASS=0; FAIL=0; START=$(date +%s)
-ok()   { printf '  \033[32mPASS\033[0m  %s\n' "$*"; PASS=$((PASS+1)); }
-bad()  { printf '  \033[31mFAIL\033[0m  %s\n' "$*"; FAIL=$((FAIL+1)); }
-step() { printf '\n== %s\n' "$*"; }
-need() { if "$@"; then return 0; else return 1; fi; }
-die()  { bad "$*"; summary; exit 1; }
-summary() {
-  printf '\n%s\n' "------------------------------------------------------------"
-  printf 'E2E: %d passed, %d failed, %ds\n' "$PASS" "$FAIL" "$(( $(date +%s) - START ))"
-  [ "$FAIL" -eq 0 ] && echo "RESULT: PASSED" || echo "RESULT: FAILED"
-}
-
-# wait_for SECONDS DESCRIPTION cmd...   (cmd succeeds => done)
-wait_for() { local t=$1 d=$2 n=0; shift 2
-  until "$@" >/dev/null 2>&1; do n=$((n+5)); [ $n -ge "$t" ] && { echo "   timed out after ${t}s waiting for: $d"; return 1; }; sleep 5; done; }
-pr_status() { # repo branch -> success|failure|pending|none  (the pull_request Checks context)
-  api GET "/repos/$1/commits/$(printf '%s' "$2" | jq -sRr @uri)/statuses" 2>/dev/null \
-    | jq -r '[.[]|select(.context|test("pull_request"))|.status]|first // "none"'; }
-is_success() { [ "$(pr_status "$1" "$2")" = success ]; }
-site_html() { curl -sk --max-time 20 "https://$1.ddev.site:8443/"; }
-open_pr_number() { # repo head-branch
-  api GET "/repos/$1/pulls?state=open&limit=50" | jq -r --arg h "$2" '.[]|select(.head.ref==$h)|.number' | head -1; }
-merge_pr() { # repo number
-  local code; code=$(curl -s -o /dev/null -w '%{http_code}' -X POST -u "$ADMIN:$ADMIN_PW" -H 'Content-Type: application/json' \
-    "$GITEA/api/v1/repos/$1/pulls/$2/merge" -d '{"Do":"merge","delete_branch_after_merge":true}'); [ "$code" = 200 ]; }
+. "$(dirname "$0")/e2e-lib.sh"
 
 # --------------------------------------------------------------------------------------------------------------------
 step "0. prerequisites"
@@ -154,6 +132,11 @@ if [ $QUICK = 0 ]; then
   grep -q "gitea (internal)      : 000" <<<"$out" && ok "Gitea is unreachable from the customer network" || bad "Gitea reachable from outside!"
   grep -q "Installing activit/ait_banners" <<<"$out" && ok "customer installs within their grant" || bad "customer install failed"
   grep -q "does not match the constraint" <<<"$out" && ok "customer cannot get versions beyond the grant" || bad "grant not enforced"
+fi
+
+if [ $QUICK = 0 ]; then
+  step "8. release lines, extension package, customers (ops/bin/e2e-lines.sh)"
+  if "$LAB_ROOT/ops/bin/e2e-lines.sh"; then ok "release-line scenarios passed"; else bad "release-line scenarios FAILED"; fi
 fi
 
 summary
