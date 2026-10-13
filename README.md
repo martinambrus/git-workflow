@@ -26,18 +26,42 @@ Everything is throwaway: the credentials are fixed, public and local-only.
 
 ## The scenario this lab runs
 
-Two Drupal 11 sites share one module, `activit/ait_banners` (a sponsorship banner block), and the sites differ:
+Two Drupal 11 sites share one module, `activit/ait_banners` (a sponsorship banner block). They are scaffolded
+identically by `ops/bin/new-drupal-project.sh`; the differences come from what happens next:
 
 | | shop-a | shop-b |
 | --- | --- | --- |
-| Shared module | `^1.0`, follows releases (update PRs) | frozen at exactly `1.1.1` |
-| Promo badge (module 1.1+) | not configured | "-20% this week" |
+| Shared module | `^1.0`, follows releases (update PRs) | `^1.0` too; can be pinned to an exact version to freeze it |
+| Promo badge (module 1.1+) | not configured | "-20% this week" (set by the scaffold) |
 | Client-only behaviour | none | `shop_b_banner_tiers`: a sponsor-tier label, an **extension module inside the project** (plan rule 8) |
 
 Developers edit the shared module in place inside a project and push; the Upstream job turns that into a merge request
 in the module repo; the main dev merges and tags; the Release job waits for Packeton and opens update PRs in every
 opted-in project; the Checks job gates `main`. Everything from section 14.4 of the plan except real internet exposure
-has been exercised on this machine (see the findings below).
+has been exercised (see the findings below). The numbered findings tell the story of the pilot run (releases 1.0.1 to
+1.1.2, `shop-b` frozen at 1.1.1); a fresh lab starts from the **latest** module code tagged `v1.0.0`, so versions in
+the findings differ from what you see on a replay.
+
+## Fresh-machine replay (verified)
+
+Done from a plain `git clone` of this repository on a machine that had been wiped of every lab container, volume,
+network and image: `./lab up`, then `ops/bin/new-drupal-project.sh` for both projects, then a complete release cycle
+with only the repo's own scripts: edit in place in `shop-a` -> Upstream MR -> module Checks green -> merge -> tag
+`v1.0.1` -> Release job -> update PRs in **both** projects (by `bot`) -> project Checks green -> merged -> both sites on
+`v1.0.1`. Also green on the replay: `./lab smoke`, `./lab external test`, and `./lab site` rebuilding a dropped database
+from committed config.
+
+The replay found three bugs that the incremental build had hidden (all fixed):
+
+24. `./lab sync` protected `main` on empty repos, so a new project's first push was rejected. Protection is now applied
+    once `main` exists.
+25. Right after the first push Gitea's branch API does not list `main` yet (async), so protection was skipped silently.
+    The scaffold now waits for the branch.
+26. `./lab destroy` left the external proxy and its network behind (it only knew the `build` profile).
+
+Prerequisites on a new machine (the lab does not install them): Docker + Compose, `git`, `curl`, `jq`, `python3`,
+DDEV with `ddev config global --router-http-port=8080 --router-https-port=8443`, `mkcert -install`, and (optional)
+Google Chrome at `/opt/google/chrome/chrome` for the browser MCP.
 
 ## What `./lab up` creates
 
