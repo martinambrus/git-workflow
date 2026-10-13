@@ -37,7 +37,7 @@ for p in shop-a shop-b; do
   if [ ! -f "$dir/composer.json" ]; then
     case $p in shop-a) args=("Acme Corp" "Proudly supporting Shop A");; *) args=("Globex Ltd" "Proudly supporting Shop B");; esac
     echo "   scaffolding $p (a few minutes)..."
-    if "$LAB_ROOT/ops/bin/new-drupal-project.sh" "$p" "${args[@]}" '^1.0' >"$STATE/scaffold-$p.log" 2>&1; then ok "$p scaffolded"
+    if timeout 2400 "$LAB_ROOT/ops/bin/new-drupal-project.sh" "$p" "${args[@]}" '^1.0' >"$STATE/scaffold-$p.log" 2>&1; then ok "$p scaffolded"
     else bad "$p scaffold failed (see ops/.state/scaffold-$p.log)"; tail -15 "$STATE/scaffold-$p.log"; summary; exit 1; fi
   else ok "$p already scaffolded"; fi
 done
