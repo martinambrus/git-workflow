@@ -36,7 +36,7 @@ pk_versions_of() { curl -s -u "admin:$PACKETON_TOKEN" "$PACKETON/p2/$1.json" | j
 pk_has() { [[ " $(pk_versions_of "$1") " == *" $2 "* ]]; }
 lock_version() { # repo package -> version in composer.lock on main (retries: a fresh repo may serve files late)
   local i out v
-  for i in 1 2 3 4 5 6; do
+  for i in $(seq 1 20); do
     out=$(api GET "/repos/$1/raw/composer.lock?ref=main" 2>&1)
     v=$(jq -r --arg p "$2" '.packages[]?|select(.name==$p)|.version' <<<"$out" 2>/dev/null)
     [ -n "$v" ] && { echo "$v"; return; }
@@ -111,7 +111,7 @@ mk_project() { # name require-json topic(yes|no)  -> minimal Composer project wi
       && git add -A && git commit -qm "Initial project" && git push -q "$(admin_url "$SITE_ORG/$name")" main ) >/dev/null 2>&1 || return 1
   [ "$topic" = yes ] && api PUT "/repos/$SITE_ORG/$name/topics/activit-project" >/dev/null
   api PATCH "/repos/$SITE_ORG/$name" '{"default_delete_branch_after_merge":true}' >/dev/null
-  wait_for_branch "$SITE_ORG" "$name" main 60 >/dev/null 2>&1
+  wait_for_branch "$SITE_ORG" "$name" main 180 >/dev/null 2>&1
   ensure_main_protection "$SITE_ORG" "$name" >/dev/null
 }
 

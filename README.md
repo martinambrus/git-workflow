@@ -97,6 +97,18 @@ Update PRs, Checks, protected branches, Packeton grants). 78 assertions:
     affected, which is why it only showed up in unattended runs. All `ddev` calls in the lab scripts now run with
     stdin closed; the scaffold also has a timeout with a clean retry. Worth a line in the plan's developer/CI notes.
 
+34. **The intermittent failures were Gitea's lagging `empty` flag (explained).** Twice a freshly created and pushed
+    repository was read too early (once the migration PR creation, once the lock file): the raw-file API answered
+    `"repository is empty"` for well over 18 seconds after the push, under CI load. The same asynchronous
+    bookkeeping as findings 25 and 27, one level deeper: not only the branch record but the repository's `empty` flag
+    lags. `wait_for_branch` now waits for both, the harness retries reads for a minute, and anything that reads a
+    repository right after its first push must do the same.
+35. **`ddev` blocks for ever on an inherited open stdin.** Launched with stdin as an open pipe/socket that never
+    sends data (CI runners, `ssh host ./lab ...`, IDE tasks, `xargs`), `ddev composer create-project` printed nothing
+    and hung (reproduced with a socket as stdin; it runs instantly with `</dev/null`). Interactive terminals are not
+    affected, which is why it only showed up in unattended runs. All `ddev` calls in the lab scripts now run with
+    stdin closed; the scaffold also has a timeout with a clean retry. Worth a line in the plan's developer/CI notes.
+
 34. **One unexplained intermittent failure.** Of the full from-scratch runs with these scenarios, one (the 2nd) failed
     in the release-line part: the `new` client's migration PR to 2.0 failed immediately (instant failure, not a
     Checks timeout) and the lock read for that repo came back empty. The identical commit then passed in 6 further runs

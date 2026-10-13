@@ -78,9 +78,15 @@ register_package() { local name=$1; load_secrets
 
 # wait_for_branch ORG NAME BRANCH [SECONDS] -> Gitea records a pushed branch asynchronously: the API (and with it
 # protection, raw file reads, registration) only sees it a moment later. Seen on fresh labs, so wait explicitly.
-wait_for_branch() { local org=$1 name=$2 br=$3 t=${4:-60} i
-  for i in $(seq 1 "$t"); do [ "$(http_code GET "/repos/$org/$name/branches/$br")" = 200 ] && return 0; sleep 1; done
-  echo "   warning: $org/$name:$br not visible via the API after ${t}s" >&2; return 1; }
+wait_for_branch() { local org=$1 name=$2 br=$3 t=${4:-120} i
+  # Two asynchronous things lag after a first push: the branch record, and the repository's "empty" flag (the raw-file
+  # API answers "repository is empty" while it is still set, seen for more than 18 s under CI load). Wait for both.
+  for i in $(seq 1 "$t"); do
+    if [ "$(http_code GET "/repos/$org/$name/branches/$br")" = 200 ] \
+       && [ "$(api GET "/repos/$org/$name" 2>/dev/null | jq -r '.empty')" = false ]; then return 0; fi
+    sleep 1
+  done
+  echo "   warning: $org/$name:$br not fully visible via the API after ${t}s" >&2; return 1; }
 
 # seed_repo ORG NAME SEED_DIR [TEMPLATE_DIR] -> if the repo is still empty and SEED_DIR exists, push TEMPLATE_DIR +
 # SEED_DIR as the first commit and tag it (as admin: only main devs may tag). Tags come from SEED_DIR.tags
