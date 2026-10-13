@@ -93,8 +93,16 @@ ops/bin/new-drupal-project.sh shop-b "Globex Ltd" "Proudly supporting Shop B" '^
 | shop-a | https://shop-a.ddev.site:8443 | `admin`/`admin` |
 | shop-b | https://shop-b.ddev.site:8443 | `admin`/`admin` |
 
-The script is idempotent only in the sense that it refuses to run on an already scaffolded project. A fresh clone
-of a project from Gitea needs `ddev start && ddev drush si` or a database; only code and config are committed.
+**The database is never committed**: it lives in DDEV's Docker volume. Code and `config/sync/` are committed, and the
+config export includes the enabled module and the placed banner block. So after cloning (or `./lab sync`):
+
+```bash
+./lab site shop-a        # or: ./lab site   (all projects)
+```
+
+starts DDEV and, when there is no database, runs `drush si --existing-config`, which rebuilds the site from the
+committed config (verified: database dropped, site rebuilt, banner shows). Content is not preserved, only config.
+`new-drupal-project.sh` itself refuses to run on an already scaffolded project.
 
 `seed/modules/ait_banners/` holds the module's source. On a fresh lab `./lab sync` pushes it to the empty
 `activit/ait_banners` repository and tags `v1.0.0` (this is the already-fixed code, i.e. what was `v1.0.1` in the
