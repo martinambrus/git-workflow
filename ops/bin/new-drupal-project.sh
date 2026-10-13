@@ -30,11 +30,12 @@ ddev restart >/dev/null 2>&1 || ddev start >/dev/null
 ddev composer config --global http-basic.packeton.test admin "$PACKETON_TOKEN" >/dev/null
 
 say "drupal/recommended-project:^11"
-# A stuck `ddev` client was seen once on a fresh lab (blocked on the Docker socket, nothing running in the container):
+# NOTE: `timeout` runs the real ddev binary, bypassing lib.sh's ddev() function, hence the explicit </dev/null.
+# A stuck `ddev` client was seen on unattended runs (blocked on the Docker socket, nothing running in the container):
 # never wait for ever, and retry from a clean directory (keep .git and .ddev, remove what a failed attempt left).
 create_project() { local try
   for try in 1 2 3; do
-    timeout 900 ddev composer create-project drupal/recommended-project:^11 . --no-interaction && return 0
+    timeout 900 ddev composer create-project drupal/recommended-project:^11 . --no-interaction </dev/null && return 0
     echo "create-project attempt $try failed or timed out; cleaning up and retrying" >&2
     find . -mindepth 1 -maxdepth 1 ! -name .git ! -name .ddev -exec rm -rf {} + 
     ddev restart >/dev/null 2>&1 || true
@@ -47,8 +48,8 @@ ddev composer config secure-http false        # lab only: Packeton is plain HTTP
 ddev composer config preferred-install.'*' dist   # plan 2.5: archives, never clones
 
 say "drush + activit/ait_banners:$constraint"
-timeout 900 ddev composer require drush/drush --no-interaction
-timeout 900 ddev composer require "activit/ait_banners:$constraint" --no-interaction
+timeout 900 ddev composer require drush/drush --no-interaction </dev/null
+timeout 900 ddev composer require "activit/ait_banners:$constraint" --no-interaction </dev/null
 find web/modules/custom -name .git | grep . && { echo "nested .git found" >&2; exit 1; } || true
 
 say "site install, block, config export"
