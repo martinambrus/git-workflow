@@ -10,11 +10,16 @@ For the Drupal sites also install [DDEV](https://ddev.com) and run once:
 `ddev config global --router-http-port=8080 --router-https-port=8443` (Packeton owns port 80) and `mkcert -install`.
 
 ```bash
-git clone <this repo> && cd <this repo>
+git clone https://github.com/martinambrus/git-workflow.git && cd git-workflow
 ./lab hosts      # once: adds "127.0.0.1 gitea.test packeton.test" to /etc/hosts (sudo)
-./lab up         # builds the runner image, starts everything, creates repos, clones them
-./lab smoke      # optional: end-to-end self-test of the stack
+./lab up         # builds the runner image, starts everything, creates and clones the repos
+./lab e2e        # scaffolds both Drupal sites if missing, then runs the WHOLE workflow with assertions
 ```
+
+`./lab e2e` is the proof that everything works on your machine (about 15 to 25 minutes the first time, mostly
+Composer and CI reinstalls). It prints PASS/FAIL per step and exits non-zero on any failure. It is re-runnable on a
+used lab: each run releases the next patch version. `./lab e2e --quick` skips the smoke and customer tests.
+`./lab destroy -y` wipes everything (including DDEV sites and local clones) for a from-scratch run.
 
 | What | URL | Login |
 | --- | --- | --- |
