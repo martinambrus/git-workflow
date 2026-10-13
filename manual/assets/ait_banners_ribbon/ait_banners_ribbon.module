@@ -1,0 +1,19 @@
+<?php
+
+/**
+ * @file
+ * Extension of AIT Banners (a separate shared package).
+ *
+ * It only uses the extension point of activit/ait_banners (>= 1.1):
+ * hook_ait_banners_banner_alter().
+ */
+
+/**
+ * Implements hook_ait_banners_banner_alter().
+ */
+function ait_banners_ribbon_ait_banners_banner_alter(array &$build, array $configuration): void {
+  $label = t('Featured partner');
+  $build['#prefix'] = '<div class="ait-ribbon"><span class="ait-ribbon__label">' . $label . '</span>';
+  $build['#suffix'] = '</div>';
+  $build['#attached']['library'][] = 'ait_banners_ribbon/ribbon';
+}

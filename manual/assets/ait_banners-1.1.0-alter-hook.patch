@@ -1,0 +1,48 @@
+diff --git a/ait_banners.api.php b/ait_banners.api.php
+new file mode 100644
+index 0000000..ca6132a
+--- /dev/null
++++ b/ait_banners.api.php
+@@ -0,0 +1,19 @@
++<?php
++
++/**
++ * @file
++ * Hooks provided by the AIT Banners module.
++ */
++
++/**
++ * Alter the sponsorship banner before it is rendered (since 1.1.0).
++ *
++ * @param array $build
++ *   The render array of the banner (theme ait_banners_banner).
++ * @param array $configuration
++ *   The block configuration: sponsor, tagline, url, image_url, promo.
++ */
++function hook_ait_banners_banner_alter(array &$build, array $configuration): void {
++  $build['#prefix'] = '<div class="my-wrapper">';
++  $build['#suffix'] = '</div>';
++}
+diff --git a/src/Plugin/Block/SponsorshipBannerBlock.php b/src/Plugin/Block/SponsorshipBannerBlock.php
+index 85f0960..b7327a9 100644
+--- a/src/Plugin/Block/SponsorshipBannerBlock.php
++++ b/src/Plugin/Block/SponsorshipBannerBlock.php
+@@ -81,7 +81,7 @@ class SponsorshipBannerBlock extends BlockBase {
+    * {@inheritdoc}
+    */
+   public function build(): array {
+-    return [
++    $build = [
+       '#theme' => 'ait_banners_banner',
+       '#sponsor' => $this->configuration['sponsor'],
+       '#tagline' => $this->configuration['tagline'],
+@@ -90,6 +90,9 @@ class SponsorshipBannerBlock extends BlockBase {
+       '#promo' => $this->configuration['promo'],
+       '#attached' => ['library' => ['ait_banners/banner']],
+     ];
++    // Extension point (since 1.1.0): other modules may alter the banner. See ait_banners.api.php.
++    \Drupal::moduleHandler()->alter('ait_banners_banner', $build, $this->configuration);
++    return $build;
+   }
+ 
+ }

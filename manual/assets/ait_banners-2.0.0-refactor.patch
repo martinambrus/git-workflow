@@ -1,0 +1,51 @@
+diff --git a/ait_banners.api.php b/ait_banners.api.php
+index ca6132a..4d1808a 100644
+--- a/ait_banners.api.php
++++ b/ait_banners.api.php
+@@ -6,14 +6,14 @@
+  */
+ 
+ /**
+- * Alter the sponsorship banner before it is rendered (since 1.1.0).
++ * Alter the sponsorship banner before it is rendered (2.0.0: renamed from hook_ait_banners_banner_alter()).
+  *
+  * @param array $build
+  *   The render array of the banner (theme ait_banners_banner).
+- * @param array $configuration
+- *   The block configuration: sponsor, tagline, url, image_url, promo.
++ * @param \Drupal\Core\Block\BlockPluginInterface $block
++ *   The block plugin (use getConfiguration()).
+  */
+-function hook_ait_banners_banner_alter(array &$build, array $configuration): void {
++function hook_ait_banners_render_alter(array &$build, $block): void {
+   $build['#prefix'] = '<div class="my-wrapper">';
+   $build['#suffix'] = '</div>';
+ }
+diff --git a/composer.json b/composer.json
+index 7364826..b2745ca 100644
+--- a/composer.json
++++ b/composer.json
+@@ -3,5 +3,7 @@
+   "description": "Sponsorship banners: a configurable banner block.",
+   "type": "drupal-custom-module",
+   "license": "GPL-2.0-or-later",
+-  "require": { "drupal/core": "^10.3 || ^11" }
++  "require": {
++    "drupal/core": "^11"
++  }
+ }
+diff --git a/src/Plugin/Block/SponsorshipBannerBlock.php b/src/Plugin/Block/SponsorshipBannerBlock.php
+index b7327a9..4fa1ff7 100644
+--- a/src/Plugin/Block/SponsorshipBannerBlock.php
++++ b/src/Plugin/Block/SponsorshipBannerBlock.php
+@@ -90,8 +90,8 @@ class SponsorshipBannerBlock extends BlockBase {
+       '#promo' => $this->configuration['promo'],
+       '#attached' => ['library' => ['ait_banners/banner']],
+     ];
+-    // Extension point (since 1.1.0): other modules may alter the banner. See ait_banners.api.php.
+-    \Drupal::moduleHandler()->alter('ait_banners_banner', $build, $this->configuration);
++    // Extension point (2.0.0): the hook was renamed and now receives the whole block plugin. See ait_banners.api.php.
++    \Drupal::moduleHandler()->alter('ait_banners_render', $build, $this);
+     return $build;
+   }
+ 

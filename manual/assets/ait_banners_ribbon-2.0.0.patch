@@ -1,0 +1,37 @@
+diff --git a/ait_banners_ribbon.module b/ait_banners_ribbon.module
+index e47fcde..04f56a0 100644
+--- a/ait_banners_ribbon.module
++++ b/ait_banners_ribbon.module
+@@ -4,14 +4,14 @@
+  * @file
+  * Extension of AIT Banners (a separate shared package).
+  *
+- * It only uses the extension point of activit/ait_banners (>= 1.1):
+- * hook_ait_banners_banner_alter().
++ * It only uses the extension point of activit/ait_banners (>= 2.0):
++ * hook_ait_banners_render_alter() (renamed from hook_ait_banners_banner_alter() in 2.0).
+  */
+ 
+ /**
+- * Implements hook_ait_banners_banner_alter().
++ * Implements hook_ait_banners_render_alter().
+  */
+-function ait_banners_ribbon_ait_banners_banner_alter(array &$build, array $configuration): void {
++function ait_banners_ribbon_ait_banners_render_alter(array &$build, $block): void {
+   $label = t('Featured partner');
+   $build['#prefix'] = '<div class="ait-ribbon"><span class="ait-ribbon__label">' . $label . '</span>';
+   $build['#suffix'] = '</div>';
+diff --git a/composer.json b/composer.json
+index 00f1acb..8d2bab5 100644
+--- a/composer.json
++++ b/composer.json
+@@ -4,7 +4,7 @@
+   "type": "drupal-custom-module",
+   "license": "GPL-2.0-or-later",
+   "require": {
+-    "activit/ait_banners": "^1.1",
+-    "drupal/core": "^10.3 || ^11"
++    "activit/ait_banners": "^2.0",
++    "drupal/core": "^11"
+   }
+ }

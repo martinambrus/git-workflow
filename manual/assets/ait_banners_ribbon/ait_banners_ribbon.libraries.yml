@@ -1,0 +1,4 @@
+ribbon:
+  css:
+    theme:
+      css/ribbon.css: {}

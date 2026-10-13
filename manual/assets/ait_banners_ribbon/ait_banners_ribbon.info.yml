@@ -1,0 +1,7 @@
+name: 'AIT Banners ribbon'
+type: module
+description: 'Extension of AIT Banners: shows a ribbon above the sponsorship banner.'
+package: Activit
+core_version_requirement: ^10.3 || ^11
+dependencies:
+  - ait_banners:ait_banners

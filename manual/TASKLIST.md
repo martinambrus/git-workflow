@@ -1,0 +1,673 @@
+# Manual walkthrough: tasklist
+
+You set up everything yourself, in this order, and take the screenshots for the ops team. The stack that is running
+for you now is **only** Gitea 28.1 and Packeton (started by `./lab bare up`): no users, no organizations, no
+repositories, no tokens, no webhooks, no runner. Every task below says what to do, what you should see, and what to
+screenshot. Tick the boxes as you go; **do not skip the "Done when" lines**, later phases depend on them.
+
+Legend: 📸 take a screenshot · ✅ what you should see · ⚠ a trap we hit in the pilot (finding number in
+[`README.md`](../README.md)) · 🧪 optional check · `$REPO` = the folder this repository is cloned to.
+
+> Run only **one** stack. The automated lab (`./lab up`, `./lab e2e`) and this bare stack share ports and names. To go
+> back to the automated lab: `./lab bare destroy` and then `./lab up`.
+
+## Contents
+
+0. [Before you start](#phase-0--before-you-start)
+1. [Gitea: install and base setup](#phase-1--gitea-install-and-base-setup)
+2. [Packeton: admin, credentials, secrets](#phase-2--packeton-admin-credentials-secrets)
+3. [The runner](#phase-3--the-runner)
+4. [`ci-tools`: the scripts every workflow calls](#phase-4--ci-tools-the-scripts-every-workflow-calls)
+5. [The module repository, release 1.0.0](#phase-5--the-module-repository-release-100)
+6. [Two Drupal 11 projects](#phase-6--two-drupal-11-projects)
+7. [Release 1.1.0 with a hook (edit in the module repo, not in a project)](#phase-7--release-110-with-a-hook)
+8. [An extension package that uses the hook, added to project 2](#phase-8--an-extension-package-that-uses-the-hook)
+9. [2.0.0: a refactor; project 1 stays on v1, project 2 moves (and fails first)](#phase-9--200-a-refactor)
+10. [Fix an old version and let it flow forward (and fail on a conflict)](#phase-10--fix-an-old-version-and-let-it-flow-forward)
+11. [Lock a client to a line or version, and re-allow upgrades](#phase-11--lock-a-client-and-re-allow-upgrades)
+12. [Optional: edit the module in place inside a project](#phase-12--optional-edit-in-place-inside-a-project)
+13. [Optional: external customers in Packeton](#phase-13--optional-external-customers-in-packeton)
+
+Appendices: [A names](#appendix-a--names-that-must-match) · [B module repo checklist](#appendix-b--module-repository-checklist) ·
+[C project repo checklist](#appendix-c--project-repository-checklist) · [D troubleshooting](#appendix-d--troubleshooting) ·
+[E screenshots](#appendix-e--screenshot-list)
+
+## The story we are telling
+
+| Who | What they are | Ends up |
+| --- | --- | --- |
+| **shop-a** (project 1) | a client that did **not** pay for upgrades | stays on the **1.x** line, gets 1.x fixes only while support is active, then is locked, then re-allowed |
+| **shop-b** (project 2) | a client that is up to date | gets 1.1.0, an **extension** package that uses the new hook, then moves to **2.0** |
+| `activit/ait_banners` | the shared module | 1.0.0, 1.1.0 (adds a hook), 2.0.0 (renames the hook: a refactor) |
+| `activit/ait_banners_ribbon` | an extension package of the module | 1.0.0 uses the 1.1 hook; 2.0.0 uses the 2.0 hook |
+
+---
+
+## Phase 0 — Before you start
+
+- [ ] **0.1 Tools.** `docker`, `git`, `jq`, `curl` installed; DDEV installed with the router moved off port 80:
+  ```bash
+  ddev config global --router-http-port=8080 --router-https-port=8443
+  mkcert -install
+  ```
+- [ ] **0.2 Names resolve.** `getent hosts gitea.test packeton.test` prints `127.0.0.1` for both. If not: `./lab hosts`.
+- [ ] **0.3 The bare stack is running.**
+  ```bash
+  cd $REPO
+  ./lab bare status
+  ```
+  ✅ `gitea` and `packeton` are `Up`. If you are not sure, `./lab bare up` is safe to repeat.
+- [ ] **0.4 A shell alias for the bare stack's Compose** (use it for every `docker compose` command below):
+  ```bash
+  export REPO=~/git-workflow-test            # adjust if you cloned elsewhere
+  alias wfb='docker compose --project-directory $REPO/ops/bare -f $REPO/ops/bare/docker-compose.yml'
+  mkdir -p $REPO/workspace                   # your clones go here (git-ignored)
+  ```
+
+**Done when:** `curl -s -o /dev/null -w '%{http_code}\n' http://gitea.test:3000/` prints `200` and
+`curl -s -o /dev/null -w '%{http_code}\n' http://packeton.test/login` prints `200`.
+
+---
+
+## Phase 1 — Gitea: install and base setup
+
+*Plan 2.1.* 📸 = screenshot for the ops runbook.
+
+- [ ] **1.1 Run the install wizard.** Open <http://gitea.test:3000/>.
+  📸 the wizard as it first appears (database SQLite3, URL `http://gitea.test:3000/`, SSH port 2222 are pre-filled
+  from the Compose file; the "Environment Configuration" box lists the variables that were applied).
+  Tick **"Only administrators can create user accounts"**, open **Administrator Account Settings**, choose a username
+  (the guide calls it `admin`; it is the "main dev"), an email and a password. Click **Install Gitea**.
+  ✅ You land on the dashboard logged in as `admin`. 📸 the dashboard.
+  ⚠ Settings that need a restart or an `app.ini` edit are covered in 1.3.
+- [ ] **1.2 Check that Actions are on.** In Gitea 28.1 Actions is **enabled by default** (plan 2.1 says "enable
+  Actions": on this version that is only a check). Create nothing yet; you will see the *Actions* tab on the first
+  repository (Phase 4). Site Administration → *Actions* → *Runners* exists (empty for now). 📸
+- [ ] **1.3 Egress policy** (so webhooks may reach Packeton on the private network). Gitea 28 blocks it by default.
+  🧪 *Optional, to screenshot the error first:* do 5.4 (the webhook) before this task and look at **Recent
+  Deliveries**: the error is `denied by egress policy ... needs an explicit IP allow entry`. 📸
+  Then edit `$REPO/ops/bare/gitea.env` and add:
+  ```
+  GITEA__security__EGRESS_MODE=lax
+  GITEA__security__ALLOWED_HOST_LIST=private,loopback
+  GITEA__repository__DEFAULT_BRANCH=main
+  ```
+  and recreate the container (data is kept in the volume):
+  ```bash
+  wfb up -d gitea
+  ```
+  ✅ <http://gitea.test:3000/> is back within ~10 s. ⚠ Finding 2. In production use the explicit Packeton host, not
+  `private`.
+- [ ] **1.4 Two more users.** Site Administration → *User Accounts* → *Create User Account*: `dev` (a normal
+  developer) and `bot` (the automation account). Untick "User must change password". Use any passwords you will
+  remember. 📸 the user list.
+- [ ] **1.5 Two organizations.** *+* → *New Organization*: `activit` (modules and tools) and `sites` (projects),
+  visibility **Private**. ⚠ The names matter: the workflow stubs contain `activit/ci-tools` (Appendix A). 📸
+- [ ] **1.6 A team per organization.** In each organization → *Teams* → *Create new team*: name `devs`, tick
+  **Include all repositories**, permission **Write**, then *Add team member*: `dev` and `bot`. 📸
+  ✅ `bot` can push branches and open pull requests, but cannot create release tags (that comes from protected tags
+  in Phase 5).
+- [ ] **1.7 A token for the bot.** Log in as `bot` (private window) → *Settings → Applications → Generate New
+  Token*, name `ci`, permissions: **repository: Read and Write**, **issue: Read and Write**,
+  **organization: Read and Write**, **user: Read**. Copy it now (shown once). Keep it in a scratch file; call it
+  `BOT_TOKEN`. 📸 the permission selection (not the token).
+
+**Done when:** you can log in as `admin`, `dev` and `bot`; `activit` and `sites` exist, each with team `devs`
+containing `dev` and `bot`; you hold a `BOT_TOKEN`.
+
+---
+
+## Phase 2 — Packeton: admin, credentials, secrets
+
+*Plan 2.2.*
+
+- [ ] **2.1 Create the admin on the command line** (there is deliberately no `ADMIN_USER` in the Compose file):
+  ```bash
+  wfb exec packeton app packagist:user:manager admin --email=admin@example.test --password='<choose one>' --admin
+  ```
+  ✅ prints `User admin was created successfully, api token: ...` — that is the **Packeton API token**; call it
+  `PACKETON_TOKEN`. (Show it again any time: `wfb exec packeton app packagist:user:manager admin --show-token`.)
+- [ ] **2.2 Log in** at <http://packeton.test/login>. 📸 the empty home page and the *Profile* page (API token).
+- [ ] **2.3 Anonymous access is off.**
+  ```bash
+  curl -s -o /dev/null -w '%{http_code}\n' http://packeton.test/packages.json     # 401
+  curl -s -o /dev/null -w '%{http_code}\n' -u admin:$PACKETON_TOKEN http://packeton.test/packages.json   # 200
+  ```
+- [ ] **2.4 Let Packeton read the private Gitea repositories** (plan 2.2). Packeton uses Composer's `auth.json` in
+  its Composer home. ⚠ For generic Git URLs the key must **include the port** (finding 3), so list both:
+  ```bash
+  BOT_TOKEN='<paste the bot token>'
+  wfb exec -T packeton sh -c 'mkdir -p /data/composer && cat > /data/composer/auth.json' <<JSON
+  { "http-basic": {
+    "gitea.test:3000": { "username": "bot", "password": "$BOT_TOKEN" },
+    "gitea.test":      { "username": "bot", "password": "$BOT_TOKEN" } } }
+  JSON
+  wfb exec -T packeton sh -c 'cat > /data/composer/config.json && chown -R www-data:www-data /data/composer' <<JSON
+  { "config": { "secure-http": false } }
+  JSON
+  ```
+  (`secure-http false` only because the lab is plain HTTP; production uses HTTPS.) 🧪 Packeton's *Admin →
+  Credentials* page is the alternative for **SSH keys**; we did not exercise it. 📸 `cat` of the two files with the
+  token masked.
+- [ ] **2.5 Organization secrets** (Gitea, as `admin`): for **both** `activit` and `sites` → *Settings → Actions →
+  Secrets → Add Secret*: `BOT_TOKEN` = the bot token, `PACKETON_TOKEN` = the Packeton token. 📸 the secrets list
+  (values are hidden).
+
+**Done when:** `curl -u admin:$PACKETON_TOKEN http://packeton.test/api/packages` returns `{"packageNames":[]}`.
+
+---
+
+## Phase 3 — The runner
+
+*Plan 2.1 (runner image and label).*
+
+- [ ] **3.1 The image.** `./lab bare up` already built `activit-runner:local` from
+  [`ops/runner/Dockerfile`](../ops/runner/Dockerfile) (PHP 8.3, Composer, git, curl, jq, perl, patch, the `yaml`
+  extension). 📸 the Dockerfile and `docker image ls activit-runner`.
+  🧪 Plan 2.1 wants this image in Gitea's own container registry; we did **not** test that (the lab uses the local
+  image).
+- [ ] **3.2 Registration token.** As `admin`: *Site Administration → Actions → Runners → Create new runner* → copy
+  the registration token. 📸 (hide the token)
+- [ ] **3.3 Start the runner.**
+  ```bash
+  cd $REPO && ./lab bare runner <registration-token>
+  ```
+  ✅ After ~10 s the runner is listed as **Idle/Online** with labels `ubuntu-latest` and `activit-runner`. 📸
+  ⚠ Workflows in this process use `runs-on: activit-runner` and **no `uses:` steps** (plan 2.4).
+
+**Done when:** the runner is online in Site Administration.
+
+---
+
+## Phase 4 — `ci-tools`: the scripts every workflow calls
+
+*Plan 2.1 / 2.4 / 12.* The stubs pin **different tags** of this repository, so tag the same commit with all of them.
+
+- [ ] **4.1 Create the repo.** In `activit`: *New Repository* `ci-tools`, Private, **no** README / .gitignore /
+  license (empty). 📸
+- [ ] **4.2 Push the scripts** (as `admin`):
+  ```bash
+  cd $REPO/workspace
+  git clone http://admin:<password>@gitea.test:3000/activit/ci-tools.git
+  cp -a $REPO/seed/tools/ci-tools/. ci-tools/ && cd ci-tools
+  git add -A && git commit -m "ci-tools: upstream, release, update-prs, checks, forward-port"
+  git branch -M main && git push -u origin main
+  for t in v1.0.0 v1.1.0 v1.2.0 v1.3.0 v1.3.1 v1.4.0; do git tag -a $t -m "ci-tools $t"; done
+  git push origin --tags
+  ```
+  ✅ the repo shows `bin/upstream.sh`, `bin/release.sh`, `bin/update-prs.sh`, `bin/check-project.sh`,
+  `bin/check-module.sh`, `bin/forward-port.sh`, and six tags. 📸
+  *Why six tags:* a tag is never moved; the workflow stubs pin `v1.1.0` (release), `v1.2.0` (checks), `v1.3.1`
+  (upstream) and `v1.4.0` (forward-port). In your own setup you would publish real versions.
+
+**Done when:** `git ls-remote --tags http://gitea.test:3000/activit/ci-tools.git` lists the six tags.
+
+---
+
+## Phase 5 — The module repository, release 1.0.0
+
+*Plan 4.* We use the module from [`seed/modules/ait_banners`](../seed/modules/ait_banners) (a sponsorship banner
+block). Write your own if you prefer; it needs `composer.json` with `"type": "drupal-custom-module"`, no `version`
+key, and name `activit/<repo>`.
+
+- [ ] **5.1 Create the repo** `activit/ait_banners` (empty, Private). 📸
+- [ ] **5.2 Protect release tags** (plan 2.1): repo → *Settings → Tags* → *Protected tags* → new rule, pattern `v*`,
+  allowed user: `admin` only. 📸 ✅ later, `dev` and `bot` cannot create tags.
+- [ ] **5.3 Seed the module** (as `admin`), **without a tag yet**:
+  ```bash
+  cd $REPO/workspace
+  git clone http://admin:<password>@gitea.test:3000/activit/ait_banners.git
+  cd ait_banners
+  cp -a $REPO/seed/modules/ait_banners/. .
+  cp -a $REPO/seed/module-template/.gitea .          # the module's workflows: checks, release, forward-port
+  git add -A && git commit -m "Initial module"
+  git branch -M main && git push -u origin main
+  ```
+  ⚠ Do this **before** the branch rules (5.5), otherwise the direct push to `main` is refused.
+  ⚠ Do **not** tag yet: the Release job triggered by a tag waits for Packeton to list that version, so the package
+  must be registered first (5.4).
+- [ ] **5.4 Register it in Packeton and connect the webhook.**
+  1. Packeton → *Submit*: repo type **VCS (auto)**, URL `http://gitea.test:3000/activit/ait_banners.git`,
+     *Check*, then add. ✅ the package page lists `dev-main` (the tag comes in 5.4b). 📸
+     ⚠ Register **before** you push the next tag (finding 6) and give Gitea a few seconds after a first push
+     (finding 27).
+  2. Gitea repo → *Settings → Webhooks → Add Webhook → Gitea*. Target URL:
+     `http://packeton.test/api/update-package?username=admin&apiToken=<PACKETON_TOKEN>&composer_package_name=activit/ait_banners`,
+     method POST, content type `application/json`, trigger **Custom events**: *Push*, *Branch or tag creation*,
+     *Branch or tag deletion*. Save, then **Test Delivery**. ✅ *Recent Deliveries* shows HTTP 202. 📸
+     ⚠ **Per repository**, not per organization: an org-wide webhook does not work with this Gitea + Packeton
+     (finding 1). ⚠ Without 1.3 this is the delivery that fails with the egress error.
+- [ ] **5.4b Tag 1.0.0** (as `admin`), now that Packeton and the webhook know the repository:
+  ```bash
+  git tag -a v1.0.0 -m "First release" && git push origin v1.0.0
+  ```
+  ✅ Packeton lists `v1.0.0` within seconds; in the module repo's *Actions* the **Release** run goes green (no
+  projects exist yet, so it opens no PRs). 📸 ⚠ Findings 6 and 27 (order and timing).
+- [ ] **5.5 Branch rules** (repo → *Settings → Branches → Add new rule*):
+  1. pattern `main`: **Disable push**, **Enable status check** with the pattern `checks / checks (pull_request)`.
+  2. pattern `[0-9]*.x` (matches `1.x`, `2.x`, not `feat.x`): same, but **Enable push + whitelist: `admin`**
+     (creating a release line is a push; only the main dev may do it). 📸 both rules
+     ⚠ The status name only exists after the first run of the checks workflow (5.6); typing it into the rule is fine.
+  Also *Settings → Repository → Pull Requests*: tick **delete branch after merge** (default). 
+- [ ] **5.6 First pull request through the gate.** Prove the rules work:
+  ```bash
+  git switch -c chore/readme && echo "# ait_banners" > README.md
+  git add -A && git commit -m "Add README" && git push -u origin chore/readme
+  ```
+  Open the PR in Gitea. ✅ *Checks* appear and run on the runner (a minute); the *Merge* button waits for green;
+  📸 the PR with the green check and the Actions run log. Merge it. Try `git switch main && git push origin HEAD`
+  with a local commit: ✅ rejected by branch protection. 📸
+
+**Done when:** Packeton shows `activit/ait_banners` `v1.0.0`; the Release run is green; a PR to `main` ran the Checks and merged; a direct
+push to `main` is refused; a `dev` user cannot push a `v*` tag.
+
+---
+
+## Phase 6 — Two Drupal 11 projects
+
+*Plan 3 and 5.* Do the whole phase for `shop-a`, then repeat it for `shop-b`.
+
+- [ ] **6.1 Two empty repos** in `sites`: `shop-a`, `shop-b` (Private, empty). Add the repository **topic**
+  `activit-project` to both (repo page → the *gear next to the description → Topics*): this opts a project in to
+  automatic update PRs. 📸
+- [ ] **6.2 Create the Drupal 11 project** (example for `shop-a`; do `shop-b` the same way):
+  ```bash
+  cd $REPO/workspace
+  git clone http://admin:<password>@gitea.test:3000/sites/shop-a.git && cd shop-a
+  ddev config --project-type=drupal11 --docroot=web --php-version=8.3 --project-name=shop-a --auto
+  cat > .ddev/docker-compose.wfnet.yaml <<'YAML'
+  # lets Composer in the web container reach packeton.test / gitea.test
+  services:
+    web:
+      networks: [default, wf-net]
+  networks:
+    wf-net:
+      external: true
+  YAML
+  rm -rf web                      # 'ddev config' creates a stub that create-project cannot use
+  ddev start
+  ddev composer config --global http-basic.packeton.test admin <PACKETON_TOKEN>
+  ddev composer create-project drupal/recommended-project:^11 . --no-interaction
+  ```
+  ⚠ Finding 9: DDEV's "global" Composer config is **per project**; set the Packeton token in every project.
+  ⚠ Finding 35: if you run these through CI / ssh / an IDE task, append `</dev/null` to `ddev composer ...`,
+  otherwise it hangs silently.
+- [ ] **6.3 Point the project at Packeton** (plan 2.5) and install the module:
+  ```bash
+  ddev composer config repositories.packeton '{"type":"composer","url":"http://packeton.test"}'
+  ddev composer config secure-http false                 # lab only: plain HTTP
+  ddev composer config preferred-install.'*' dist        # archives, never git clones (plan rule 4)
+  ddev composer require drush/drush
+  ddev composer require "activit/ait_banners:^1.0"
+  find web/modules/custom/ait_banners -name .git          # must print nothing
+  ```
+  ✅ Composer prints `Installing activit/ait_banners (v1.0.0): Extracting archive` and the folder
+  `web/modules/custom/ait_banners` exists (`drupal-custom-module` lands there with the stock installer paths).
+  ⚠ Finding 8: if Composer prints *"could not be fully loaded ... authentication"* it silently used stale cache —
+  fix the token before going on. 📸 the require output.
+- [ ] **6.4 Install Drupal and enable the module:**
+  ```bash
+  mkdir -p config/sync
+  ddev drush si standard -y --site-name="Shop A" --account-name=admin --account-pass=admin
+  ```
+  Now open `web/sites/default/settings.php` and, **above** the line
+  `if (getenv('IS_DDEV_PROJECT') == 'true' && file_exists(__DIR__ . '/settings.ddev.php')) {`, add
+  ```php
+  $settings['config_sync_directory'] = '../config/sync';
+  ```
+  (`drush si` rewrites `settings.php`, so this must come **after** the install; finding 5.) Then:
+  ```bash
+  ddev drush en ait_banners -y
+  ```
+  and place the block: <https://shop-a.ddev.site:8443/user/login> (`admin`/`admin`) → *Structure → Block layout* →
+  Olivero, region **Content Above** → *Place block* → **Sponsorship banner** → set a sponsor name
+  (e.g. `Acme Corp` for shop-a, `Globex Ltd` for shop-b) → Save. 📸 the place-block dialog and the front page with
+  the banner. Export the configuration:
+  ```bash
+  ddev drush cex -y
+  ```
+- [ ] **6.5 Workflows and .gitignore, then commit everything including `vendor/`** (plan rule 5):
+  ```bash
+  cp -a $REPO/seed/project-template/. .                  # adds .gitea/workflows: upstream.yml, checks.yml
+  printf '%s\n' 'web/sites/default/files/' 'config/sync/.htaccess' > .gitignore
+  git check-ignore -v vendor web/core web/modules/contrib web/modules/custom   # must print nothing
+  git add -A && git commit -m "Initial project: Drupal 11, activit/ait_banners 1.0.0, vendor and web committed"
+  git branch -M main && git push -u origin main
+  ```
+  ⚠ `drupal/recommended-project` ships **no** `.gitignore`; without line 1 Drupal's runtime files would be
+  committed (finding 5). ⚠ `config/sync/.htaccess` is written lazily by Drupal and would leave the tree dirty
+  (finding 28). 🧪 The push is large (25k+ files): that is expected.
+- [ ] **6.6 Protect `main` and delete merged branches** (as in 5.5, pattern `main`, status
+  `checks / checks (pull_request)`, repo → *Settings → Branches*). Do it **after** the first push (finding 24/25).
+  The first push also triggers *Upstream* and *Checks* runs on the push event. 📸 the Actions tab.
+
+**Done when (both projects):** the front page shows the banner; `composer.lock` has `activit/ait_banners` `v1.0.0`;
+`git status` is clean; a PR to `main` runs Checks and can be merged; `main` is protected.
+
+> 🧪 **Shortcut for later rebuilds:** `ops/bin/new-drupal-project.sh` does 6.2–6.5 in one go (it needs the automated
+> lab's state files, so it is not usable on this bare stack; the commands above are its content).
+
+---
+
+## Phase 7 — Release 1.1.0 with a hook
+
+*Plan 6/8/9, "edit in the module's own repo": branch, PR, merge, tag.* We add `hook_ait_banners_banner_alter()`.
+
+- [ ] **7.1 Branch in the module repo and apply the change:**
+  ```bash
+  cd $REPO/workspace/ait_banners && git switch main && git pull
+  git switch -c feature/alter-hook
+  git apply $REPO/manual/assets/ait_banners-1.1.0-alter-hook.patch
+  git add -A && git commit -m "Add hook_ait_banners_banner_alter() extension point"
+  git push -u origin feature/alter-hook
+  ```
+  (The patch changes `SponsorshipBannerBlock::build()` to call `moduleHandler->alter('ait_banners_banner', ...)`
+  and documents the hook in `ait_banners.api.php`.)
+- [ ] **7.2 Pull request → green Checks → merge.** 📸 the PR (note the module Checks: JSON, PHP and YAML syntax).
+- [ ] **7.3 Tag 1.1.0 as the main dev:**
+  ```bash
+  git switch main && git pull
+  git tag -a v1.1.0 -m "Extension point: hook_ait_banners_banner_alter()"
+  git push origin v1.1.0
+  ```
+  ✅ Packeton lists `v1.1.0` within seconds (the webhook). 📸
+- [ ] **7.4 Watch the Release job** (module repo → *Actions*): it checks the tag and `composer.json`, waits until
+  Packeton lists the version, then opens **`update/ait_banners-1.1.0`** PRs in **both** projects, authored by `bot`.
+  📸 the run log and the two PRs (body: diff stat + the 9.3/9.4 checklist).
+- [ ] **7.5 Review and merge both update PRs** (plan 9): read the diff (the whole release is in the module folder),
+  let *Checks* run, merge. Then in each project:
+  ```bash
+  git switch main && git pull && ddev drush updb -y && ddev drush cr
+  ```
+  ✅ `jq -r '.packages[]|select(.name=="activit/ait_banners")|.version' composer.lock` prints `v1.1.0` in both.
+  📸 the merged PR and the diff of `composer.lock`.
+
+**Done when:** both projects are on `v1.1.0` and still show their banner.
+
+---
+
+## Phase 8 — An extension package that uses the hook
+
+*Plan 11, rule 8.* A **separate shared package** `activit/ait_banners_ribbon` requires `activit/ait_banners ^1.1`
+and implements the new hook; only **shop-b** gets it.
+
+- [ ] **8.1 Create the repo and apply the module checklist** (Appendix B): `activit/ait_banners_ribbon`.
+  Seed it from the asset and tag 1.0.0:
+  ```bash
+  cd $REPO/workspace
+  git clone http://admin:<password>@gitea.test:3000/activit/ait_banners_ribbon.git && cd ait_banners_ribbon
+  cp -a $REPO/manual/assets/ait_banners_ribbon/. .
+  cp -a $REPO/seed/module-template/.gitea .
+  git add -A && git commit -m "Initial extension: ribbon above the banner"
+  git branch -M main && git push -u origin main
+  ```
+  Then register it in Packeton and add its webhook (5.4 with `composer_package_name=activit/ait_banners_ribbon`),
+  tag protection and branch rules (5.2, 5.5), and **only then** tag:
+  ```bash
+  git tag -a v1.0.0 -m "1.0.0" && git push origin v1.0.0
+  ```
+  📸 Packeton now lists two packages.
+- [ ] **8.2 Install it in shop-b only**, through a branch and a PR:
+  ```bash
+  cd $REPO/workspace/shop-b && git switch main && git pull
+  git switch -c feature/ribbon
+  ddev composer require "activit/ait_banners_ribbon:^1.0"
+  ddev drush en ait_banners_ribbon -y && ddev drush cex -y
+  git add -A && git commit -m "Add the ribbon extension" && git push -u origin feature/ribbon
+  ```
+  PR → Checks → merge. ✅ the shop-b front page now shows **"FEATURED PARTNER"** above the banner; shop-a does not.
+  📸 both sites side by side.
+  ⚠ If the module were still 1.0.0 this would be refused: the extension requires `^1.1`.
+
+**Done when:** shop-b shows the ribbon, shop-a does not; shop-b's lock has both packages.
+
+---
+
+## Phase 9 — 2.0.0, a refactor
+
+*Plan 11 (release lines).* The hook is **renamed** (`ait_banners_banner` → `ait_banners_render`): a breaking change.
+
+- [ ] **9.1 Create the 1.x line first, then develop 2.0 on `main`:**
+  ```bash
+  cd $REPO/workspace/ait_banners && git switch main && git pull
+  git branch 1.x v1.1.0 && git push origin 1.x        # allowed: you are on the push whitelist of [0-9]*.x
+  git switch -c refactor/2.0
+  git apply $REPO/manual/assets/ait_banners-2.0.0-refactor.patch
+  git add -A && git commit -m "2.0: rename the alter hook, require Drupal 11"
+  git push -u origin refactor/2.0
+  ```
+  PR → Checks → merge. 📸 `1.x` in the branch list (it is protected by the glob rule without anyone creating a
+  rule for it: try a direct push as `dev`: refused).
+- [ ] **9.2 Tag 2.0.0:**
+  ```bash
+  git switch main && git pull && git tag -a v2.0.0 -m "2.0.0: hook renamed" && git push origin v2.0.0
+  ```
+- [ ] **9.3 Nothing happens to existing clients.** ✅ The Release job succeeds and opens **no** update PR in
+  either project: both are on `^1.0`. 📸 the green run and the empty PR lists.
+  **shop-a stays on the v1 line.** This is "client 1 did not pay for upgrades": nothing to do.
+- [ ] **9.4 shop-b tries to upgrade and Composer refuses:**
+  ```bash
+  cd $REPO/workspace/shop-b && git switch main && git pull && git switch -c migrate/2.0
+  ddev composer require "activit/ait_banners:^2.0"
+  ```
+  ✅ **Error:** Composer explains that `activit/ait_banners_ribbon 1.0.0` requires `activit/ait_banners ^1.1`,
+  so `^2.0` cannot be installed. 📸 the error. This is the protection working.
+  ⚠ What would happen **without** it (🧪 optional proof): the module would update, the extension would silently
+  stop doing anything (the ribbon disappears, no error), because nobody calls the old hook name any more.
+  Reset: `git restore . && git switch main`.
+- [ ] **9.5 Release the extension for 2.0** (tag the old line first so it stays maintainable):
+  ```bash
+  cd $REPO/workspace/ait_banners_ribbon && git switch main && git pull
+  git branch 1.x v1.0.0 && git push origin 1.x
+  git switch -c release/2.0 && git apply $REPO/manual/assets/ait_banners_ribbon-2.0.0.patch
+  git add -A && git commit -m "2.0: use hook_ait_banners_render_alter(), require ait_banners ^2.0"
+  git push -u origin release/2.0
+  ```
+  PR → Checks → merge → `git switch main && git pull && git tag -a v2.0.0 -m "2.0.0" && git push origin v2.0.0`.
+  ⚠ Release order matters: the extension's 2.0.0 can only be installed after the base's 2.0.0 exists (finding in
+  [`plan-changes.md`](../plan-changes.md) item 17).
+- [ ] **9.6 shop-b moves both packages together:**
+  ```bash
+  cd $REPO/workspace/shop-b && git switch main && git pull && git switch -c migrate/2.0
+  ddev composer require "activit/ait_banners:^2.0" "activit/ait_banners_ribbon:^2.0"
+  ddev drush updb -y && ddev drush cr && ddev drush cex -y
+  git add -A && git commit -m "Move to ait_banners 2.0 and ribbon 2.0" && git push -u origin migrate/2.0
+  ```
+  PR → Checks → merge. ✅ shop-b shows the ribbon again, now on `v2.0.0`; shop-a is still `v1.1.0`.
+  📸 `composer.lock` of both projects side by side.
+
+**Done when:** shop-a is on `v1.1.0` (v1 line), shop-b on `v2.0.0` with the ribbon working.
+
+---
+
+## Phase 10 — Fix an old version and let it flow forward
+
+*Plan 11, "fix for an old release line".* A fix is made **on the 1.x branch**, released as `v1.1.1`, and carried
+**forward** to `main` automatically; a conflicting one needs a human.
+
+- [ ] **10.1 A clean fix on 1.x:**
+  ```bash
+  cd $REPO/workspace/ait_banners && git fetch origin && git switch -c fix/sponsor-spacing origin/1.x
+  echo '.ait-banner__sponsor { letter-spacing: 0.01em; }' >> css/banner.css
+  git add -A && git commit -m "1.x: slight letter-spacing on the sponsor name"
+  git push -u origin fix/sponsor-spacing
+  ```
+  Open the PR with **base branch `1.x`** (not `main`). Checks → merge.
+- [ ] **10.2 Tag it on the 1.x branch:**
+  ```bash
+  git switch 1.x && git pull && git tag -a v1.1.1 -m "1.1.1" && git push origin v1.1.1
+  ```
+  ✅ **Release job → update PR only in shop-a** (`update/ait_banners-1.1.1`): shop-b is on `^2.0`, so it is skipped.
+  📸 the one PR and the empty list in shop-b. Merge it. shop-a is now on `v1.1.1`.
+- [ ] **10.3 The forward-port.** Pushing to `1.x` triggered the **Forward-port** job: ✅ a PR
+  `fwd/1.x/<sha>-to-main` ("Forward-port (1.x -> main): …") exists in the module repo. 📸 Its title and body.
+  Let Checks run and merge it: the fix now exists on `main` too.
+  *(If a `2.x` branch existed, it would target `2.x` first and then `main`: each merge triggers the next hop.)*
+- [ ] **10.4 It reaches the 2.x client with the next 2.x release:**
+  ```bash
+  cd $REPO/workspace/ait_banners && git switch main && git pull
+  git tag -a v2.0.1 -m "2.0.1: includes the forwarded 1.x fix" && git push origin v2.0.1
+  ```
+  ✅ update PR `update/ait_banners-2.0.1` in **shop-b** only. Merge it. 📸
+- [ ] **10.5 A fix that conflicts** (the 2.0 refactor touched the same line):
+  ```bash
+  git fetch origin && git switch -c fix/comment origin/1.x
+  sed -i 's#other modules may alter the banner. See#other modules may alter the banner, see#' src/Plugin/Block/SponsorshipBannerBlock.php
+  git add -A && git commit -m "1.x: punctuation in the extension point comment"
+  git push -u origin fix/comment
+  ```
+  PR into `1.x` → Checks → merge → tag `v1.1.2` on `1.x`. ✅ shop-a gets its update PR as before (merge it: shop-a is now on `v1.1.2`), **but** the
+  Forward-port job **fails** (red run) and opens an **issue** "Forward-port needed (1.x -> main)" that names the
+  conflicting file and the exact commands to port it by hand. No PR is opened for it. 📸 the red run, the issue.
+  Resolve it as the issue says (`git switch -c fwd/... origin/main && git cherry-pick -x -m 1 <sha>`, fix the
+  conflict, PR). *This is the "2.0 conflicts because of the refactor" case: the system tells you and never guesses.*
+
+**Done when:** shop-a `v1.1.2`, shop-b `v2.0.1`, a clean forward-port was merged, and one conflict produced an issue.
+
+---
+
+## Phase 11 — Lock a client and re-allow upgrades
+
+*Plan 1 (the table), 9 and 11 ("Freeze a project").* Everything below is done on **shop-a**, as PRs.
+
+| Goal | How | Effect |
+| --- | --- | --- |
+| **Stay on the v1 line** | constraint `^1.0` (what it already has) | 2.x is never installed; 1.x patch releases still arrive as update PRs |
+| **Support expired: no more automatic update PRs** | remove the repository topic `activit-project` | the Release job skips it; it can still `composer update` by hand |
+| **Freeze at an exact version** | constraint `1.1.2` (no `^`) | nothing moves it, not even a manual `composer update` |
+| **Re-allow** | restore `^1.1`, re-add the topic | the next release opens an update PR again |
+
+- [ ] **11.1 Lock to the v1 line.** `jq -r '.require["activit/ait_banners"]' composer.json` in shop-a prints `^1.0`.
+  📸 composer.json. ✅ Nothing to do: this is the state since Phase 6, and 9.3 showed it holds.
+- [ ] **11.2 Support expired.** Gitea → `sites/shop-a` → remove the topic `activit-project`. 📸 Release a tiny 1.x
+  patch (`v1.1.3`, as in 10.1/10.2). ✅ Packeton lists `v1.1.3`, **no** update PR appears in shop-a.
+  🧪 In shop-a: `ddev composer outdated "activit/*"` lists the newer version: the project can still choose to take
+  it by hand (that is the "we do not supply it automatically" case).
+- [ ] **11.3 Freeze at an exact version.**
+  Pin it at the version it has **now** (read it from `composer.lock`: `v1.1.2` in this walkthrough; pinning an
+  older number would be a downgrade):
+  ```bash
+  cd $REPO/workspace/shop-a && git switch main && git pull && git switch -c freeze/ait-banners
+  ddev composer require "activit/ait_banners:1.1.2"
+  git add -A && git commit -m "Freeze activit/ait_banners at 1.1.2" && git push -u origin freeze/ait-banners
+  ```
+  PR → Checks → merge. ✅ `composer.json` now has `"activit/ait_banners": "1.1.2"`; `ddev composer update
+  activit/ait_banners` reports *Nothing to modify*. 📸 Re-add the topic and release another patch (`v1.1.4`):
+  ✅ the Release job still opens **no** PR for shop-a (constraint `1.1.2` does not allow it).
+- [ ] **11.4 Re-allow upgrades (they pay again).**
+  ```bash
+  git switch main && git pull && git switch -c unfreeze/ait-banners
+  ddev composer require "activit/ait_banners:^1.1"
+  git add -A && git commit -m "Allow 1.x updates again" && git push -u origin unfreeze/ait-banners
+  ```
+  PR → merge; make sure the topic `activit-project` is back. ✅ Release the next 1.x patch: shop-a receives its
+  update PR again, with a catch-up diff covering everything it missed. 📸
+  To move it to **2.x** as well (they bought the major): `ddev composer require "activit/ait_banners:^2.0"` in a PR
+  (shop-a has no extension, so there is no conflict). ⚠ This is a deliberate act; no job does it.
+
+**Done when:** you have seen all four rows of the table work, with screenshots.
+
+---
+
+## Phase 12 — Optional: edit in place inside a project
+
+*Plan 6 and 7.* The other direction: a developer fixes the module **inside shop-a** and the *Upstream* job turns it
+into a merge request in the module repo.
+
+- [ ] **12.1** In shop-a (on a branch): append a CSS comment to
+  `web/modules/custom/ait_banners/css/banner.css`, commit, push.
+- [ ] **12.2** ✅ The *Upstream* run (project → *Actions*) opens a merge request in `activit/ait_banners` from branch
+  `up/shop-a/<your-branch>`; because shop-a is locked to a **1.x** release **and the branch `1.x` exists**, its
+  target is `1.x` (not `main`). The project PR gets one comment with the link. 📸 Merge it, tag `v1.1.x` on 1.x
+  (10.2), and the loop closes. ⚠ A project *cannot* merge to `main` while its module folder differs from the release
+  (Checks fail on PRs into `main`; plan 6.6). ⚠ Never commit to an `up/...` branch by hand.
+
+---
+
+## Phase 13 — Optional: external customers in Packeton
+
+*Plan 10.* Customers install from Packeton only, with a grant limited by version and a freeze date. We verified
+this through Packeton's API in the lab; the UI exposes the same objects (**Admin → Groups**, **Admin → Users**).
+
+- [ ] **13.1** Create a group `unipo` with the package `activit/ait_banners` and version constraint `<2.0`.
+- [ ] **13.2** Create a user `unipo` in that group; optionally set **"Expired updates at"** (the customer is frozen
+  on what was released before that date; ⚠ do **not** confuse it with account expiry, which locks them out).
+  Copy the user's API token.
+- [ ] **13.3** Test from any machine:
+  ```bash
+  curl -s -u unipo:<token> http://packeton.test/p2/activit/ait_banners.json | jq -r '[.packages[][].version]|join(" ")'
+  ```
+  ✅ only versions below 2.0 (and, with the freeze date set, only those released before it). Anonymous: 401.
+- [ ] **13.4 Re-subscribe:** widen the group to all versions and clear the date: the customer now *sees* 2.x, but
+  `composer update` stays on 1.x until their `composer.json` asks for `^2.0` (finding 32).
+  ⚠ Finding 16: Packeton's metadata exposes the internal Gitea clone URL; hide it in the proxy in production.
+  🧪 `./lab external` (automated lab only) shows the TLS-proxy topology.
+
+---
+
+## Appendix A — names that must match
+
+The workflow stubs in `seed/` contain these literally. Use them, or edit the stubs consistently.
+
+| Thing | Name |
+| --- | --- |
+| Gitea URL / Packeton URL | `http://gitea.test:3000` / `http://packeton.test` |
+| Organizations | `activit` (modules, `ci-tools`), `sites` (projects) |
+| Users | `admin` (main dev: tags, release lines), `dev`, `bot` (automation) |
+| Org secrets (both orgs) | `BOT_TOKEN`, `PACKETON_TOKEN` |
+| Runner label | `activit-runner` |
+| ci-tools tags | `v1.1.0` release, `v1.2.0` checks, `v1.3.1` upstream, `v1.4.0` forward-port |
+| Status check required on `main` and `[0-9]*.x` | `checks / checks (pull_request)` |
+| Opt-in topic for update PRs | `activit-project` |
+| Default branch | `main` |
+
+## Appendix B — module repository checklist
+
+For every module repo (`ait_banners`, `ait_banners_ribbon`, ...):
+
+- [ ] repo in `activit`, Private; default branch `main`
+- [ ] seeded with the module files **and** `seed/module-template/.gitea` (checks, release, forward-port workflows)
+- [ ] protected tag pattern `v*`, allowed user `admin`
+- [ ] branch rule `main` (disable push; status `checks / checks (pull_request)`)
+- [ ] branch rule `[0-9]*.x` (push whitelist `admin`; same status check)
+- [ ] delete branch after merge
+- [ ] registered in Packeton (Submit → VCS (auto))
+- [ ] webhook to Packeton **with** `composer_package_name=activit/<repo>` (push, branch/tag creation, deletion)
+- [ ] tagged `v1.0.0` by the main dev; Packeton lists it
+
+## Appendix C — project repository checklist
+
+For every project repo (`shop-a`, `shop-b`):
+
+- [ ] repo in `sites`, Private; topic `activit-project` (while it should receive update PRs)
+- [ ] `composer.json`: Packeton repository, `preferred-install: dist`, module constraint; `vendor/` and `web/` committed
+- [ ] `.gitignore` has `web/sites/default/files/` and `config/sync/.htaccess`
+- [ ] `.gitea/workflows/` has `upstream.yml` and `checks.yml` (from `seed/project-template`)
+- [ ] branch rule `main` **after** the first push; delete branch after merge
+- [ ] Packeton token set **in this project's DDEV** (`ddev composer config --global http-basic...`)
+
+## Appendix D — troubleshooting
+
+| Symptom | Cause / fix |
+| --- | --- |
+| Webhook delivery: `denied by egress policy` | task 1.3 (`EGRESS_MODE=lax`, `ALLOWED_HOST_LIST`) |
+| Packeton: `Missing or invalid payload` / nothing indexes | org-wide or wrong hook: use the per-repo URL with `composer_package_name` (finding 1) |
+| Packeton cannot clone a repo | task 2.4 (`auth.json`, host key with `:3000`); bot token scopes |
+| Composer: package "could not be found" or stale versions | Packeton token missing in this project's DDEV, or silent 401 fallback (finding 8/9) |
+| `ddev composer ...` hangs without output | stdin was an open pipe (CI/ssh): add `</dev/null` (finding 35) |
+| First push to a project is rejected | you protected `main` before the first push (6.6) |
+| PR cannot merge: "required status check" never appears | runner offline (phase 3) or the status name differs: it must be `checks / checks (pull_request)` |
+| Workflow fails at `git clone .../ci-tools` | tag missing (4.2) or `BOT_TOKEN` secret not set on that organization |
+| New repo/branch "not found" or "repository is empty" for ~a minute | Gitea's async bookkeeping (findings 25, 27, 34): wait, then retry |
+| A `dev-up/...` version of a deleted branch lingers in Packeton | `wfb exec -u www-data packeton app packagist:update activit/<module> --delete-before` (finding 18) |
+| You want to start over | `./lab bare destroy` then `./lab bare up` |
+
+## Appendix E — screenshot list
+
+For the ops runbook, in order: Gitea wizard (1.1) · dashboard · users · organizations and teams · token permissions ·
+egress error (optional) · Packeton home/profile · `auth.json` (masked) · secrets list · runner online · `ci-tools`
+tags · module repo protected tags and the two branch rules · Packeton package page (1.0.0) · webhook deliveries ·
+first PR with green Checks · direct push rejected · two projects' front pages · project topic · Actions runs ·
+1.1.0 PR/tag/Release run/update PRs · ribbon on shop-b only · Composer conflict error (9.4) · both projects'
+`composer.lock` after 2.0 · `1.x` and its protection · forward-port PR · conflict issue + red run · the four lock
+states (11.1–11.4).

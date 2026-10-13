@@ -1,0 +1,10 @@
+{
+  "name": "activit/ait_banners_ribbon",
+  "description": "Extension for activit/ait_banners: adds a ribbon above the banner through hook_ait_banners_banner_alter().",
+  "type": "drupal-custom-module",
+  "license": "GPL-2.0-or-later",
+  "require": {
+    "activit/ait_banners": "^1.1",
+    "drupal/core": "^10.3 || ^11"
+  }
+}

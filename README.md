@@ -3,6 +3,12 @@
 A local, rebuildable Gitea + Packeton + Actions runner to test
 [`shared-drupal-modules-workflow.md`](shared-drupal-modules-workflow.md) end to end on one machine.
 
+**Setting this up by hand (to learn it and screenshot it for ops)?** `./lab bare up` starts a *bare* Gitea 28.1 +
+Packeton with nothing configured, and [`manual/TASKLIST.md`](manual/TASKLIST.md) walks you through everything
+else step by step: Gitea and Packeton setup, runner, module repo, two Drupal 11 projects, a hook release, an
+extension package, a 2.0 refactor, fixing an old version, locking and re-allowing a client. (Not together with the
+automated lab: they share ports and names.)
+
 **Looking for what to change in the plan?** See [`plan-changes.md`](plan-changes.md): the findings below mapped to the
 sections of the plan, with a status table for section 14.4.
 

@@ -34,6 +34,29 @@ case $cmd in
   external) "$ROOT/ops/bin/external.sh" "${1:-up}" ;;
   prune)    "$ROOT/ops/bin/prune.sh" ;;
   e2e)      "$ROOT/ops/bin/e2e.sh" "$@" ;;
+  bare)     # a bare Gitea + Packeton for the manual walkthrough (manual/TASKLIST.md); nothing is configured
+            BD="$ROOT/ops/bare"; bdc() { docker compose --project-directory "$BD" -f "$BD/docker-compose.yml" "$@"; }
+            sub=${1:-up}; shift || true
+            case $sub in
+              up)      if [ -d "$ROOT/ops/.state" ] && dc ps -q 2>/dev/null | grep -q .; then
+                         echo "The automated lab is running (./lab status). Stop it first: ./lab destroy -y   (ports and names are shared)" >&2; exit 1; fi
+                       [ -f "$BD/gitea.env" ] || cp "$BD/gitea.env.example" "$BD/gitea.env"
+                       docker image inspect activit-runner:local >/dev/null 2>&1 || bdc --profile build build runner-image
+                       bdc up -d gitea packeton
+                       until [ "$(curl -s -o /dev/null -w '%{http_code}' http://localhost:3000/)" = 200 ]; do sleep 2; done
+                       until [ "$(curl -s -o /dev/null -w '%{http_code}' http://localhost/login)" = 200 ]; do sleep 2; done
+                       echo; echo "Gitea    http://gitea.test:3000   (first visit: install wizard)"
+                       echo "Packeton http://packeton.test      (no user yet: create the admin on the command line)"
+                       hosts_ok || echo "NOTE: run ./lab hosts once" ;;
+              runner)  [ -n "${1:-}" ] || { echo "usage: ./lab bare runner <registration-token>   (Gitea: Site administration > Actions > Runners)" >&2; exit 1; }
+                       printf 'RUNNER_TOKEN=%s\n' "$1" > "$BD/.env"; bdc --profile runner up -d runner ;;
+              status)  bdc --profile runner ps ;;
+              logs)    bdc --profile runner logs -f --tail 50 "$@" ;;
+              down)    bdc --profile runner down ;;
+              destroy) read -r -p "Delete the bare Gitea and Packeton and ALL their data (volumes wfbare_*)? [y/N] " a
+                       if [ "$a" = y ]; then bdc --profile runner --profile build down -v --remove-orphans; rm -f "$BD/.env" "$BD/gitea.env"; echo destroyed; fi ;;
+              *)       echo "usage: ./lab bare up|runner <token>|status|logs|down|destroy" >&2; exit 1 ;;
+            esac ;;
   smoke)    "$ROOT/ops/bin/smoke.sh" "$@" ;;
   composer) # composer inside the runner image, on the lab network, with Packeton credentials preloaded
             load_secrets; mkdir -p "$STATE/composer-home"
@@ -52,6 +75,8 @@ case $cmd in
 ./lab prune     delete branches without an open PR, make Packeton drop their dev- versions
 ./lab e2e [--quick|lines]  the WHOLE workflow with assertions (scaffolds the sites if missing); re-runnable;
                 'lines' = only the release-line scenarios (2.0.0, 1.x/2.x branches, extension package, customers)
+./lab bare [up|runner <token>|status|logs|down|destroy]  a BARE Gitea + Packeton for the manual walkthrough
+                (manual/TASKLIST.md): nothing configured, you do it; not together with the automated lab
 ./lab smoke     self-test of the stack only (repo, tag, webhook, Actions job, composer)
 ./lab composer  run Composer (PHP 8.3 image on the lab network; no PHP needed on the host)
 ./lab logs [svc]  follow logs;  ./lab down  stop;  ./lab destroy [-y]  delete ALL lab data;  ./lab reset  destroy + up

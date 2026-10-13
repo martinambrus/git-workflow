@@ -5,3 +5,6 @@ ops/.env
 /modules/
 /tools/
 /projects/
+/workspace/
+ops/bare/gitea.env
+ops/bare/.env
