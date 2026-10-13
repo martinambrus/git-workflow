@@ -57,6 +57,8 @@ ddev drush cex -y
 
 say "commit (vendor/ and web/ included) + push"
 git check-ignore -v vendor web/core web/modules/contrib web/modules/custom && { echo "important paths are ignored" >&2; exit 1; } || true
+# workflow stubs from the project template (plan 2.5 / section 12)
+cp -a "$LAB_ROOT/seed/project-template/." .
 # runtime files only: everything else (vendor/, web/core, modules) is committed on purpose
 printf '%s\n' "web/sites/default/files/" > .gitignore
 git add -A

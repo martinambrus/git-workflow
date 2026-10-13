@@ -4,3 +4,4 @@ module     ait_banners
 # module   some_upstream   https://github.com/example/some_upstream.git
 project    shop-a
 project    shop-b
+tool       ci-tools

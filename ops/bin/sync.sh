@@ -2,6 +2,7 @@
 # Make Gitea + Packeton + the local folders match lab.manifest. Idempotent; run it as often as you like.
 #   module  <name> [<source-git-url>]  -> activit/<name>, cloned to modules/<name>
 #   project <name> [<source-git-url>]  -> sites/<name>,   cloned to projects/<name>
+#   tool    <name> [<source-git-url>]  -> activit/<name>, cloned to tools/<name> (e.g. ci-tools: not a Composer package)
 # With a source URL the repo is imported (history + tags) the first time; without one it is created empty.
 set -euo pipefail
 . "$(dirname "$0")/lib.sh"
@@ -17,13 +18,18 @@ grep -vE '^\s*(#|$)' "$MANIFEST" | while read -r kind name src _; do
   case $kind in
     module)  org=$MODULE_ORG; dir=$LAB_ROOT/modules/$name ;;
     project) org=$SITE_ORG;   dir=$LAB_ROOT/projects/$name ;;
+    tool)    org=$MODULE_ORG; dir=$LAB_ROOT/tools/$name ;;
     *) echo "manifest: unknown kind '$kind'" >&2; continue ;;
   esac
   say "$kind $org/$name"
   ensure_repo "$org" "$name" "$src"
+  if [ "$kind" = tool ]; then
+    ensure_tag_protection "$org" "$name"
+    seed_repo "$org" "$name" "$LAB_ROOT/seed/tools/$name"
+  fi
   if [ "$kind" = module ]; then
     ensure_tag_protection "$org" "$name"
-    seed_module "$name"
+    seed_repo "$org" "$name" "$LAB_ROOT/seed/modules/$name"
     ensure_pkg_hook "$name"
     register_package "$name"
   fi

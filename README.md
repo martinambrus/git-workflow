@@ -67,7 +67,7 @@ Verified with the real Drupal projects (plan 14.4): `drupal-custom-module` lands
 with the stock `drupal/recommended-project` installer paths; Packeton's archive honours `export-ignore` (no
 `tests/`, no `.gitattributes` in the install); no nested `.git`; `composer update activit/ait_banners` moves a
 project from `v1.0.0` to `v1.0.1`; DDEV web containers reach Packeton once joined to the `wf-net` network.
-Not yet verified: `dev-up/...` branch installs, customer limits, the Upstream/Release/Update-PR workflows.
+Not yet verified: `dev-up/...` branch installs, customer limits, the Release and Update-PR workflows.
 
 5. **`drupal/recommended-project` ships no `.gitignore`**, so Drupal's runtime `web/sites/default/files/` would be
    committed (twig cache, `.htaccess` files). The projects add `web/sites/default/files/` and nothing else
@@ -108,6 +108,23 @@ committed config (verified: database dropped, site rebuilt, banner shows). Conte
 `activit/ait_banners` repository and tags `v1.0.0` (this is the already-fixed code, i.e. what was `v1.0.1` in the
 first run). After that, the module lives in Gitea and `modules/ait_banners` is its working clone.
 
+## The Upstream job (ci-tools)
+
+`activit/ci-tools` is a plain repository (kind `tool` in `lab.manifest`, source in `seed/tools/ci-tools`, tagged
+`v1.0.0`). Project workflows clone it at a fixed tag and run `bin/upstream.sh`; the stub lives in
+`seed/project-template/.gitea/workflows/upstream.yml` and is copied into every project.
+
+What it does on every push to a project branch: reads the locked `activit/*` modules from `composer.lock`, compares
+each module folder with `git archive` of its locked tag, and if they differ pushes **one cumulative commit** to
+`up/<project>/<branch>` in the module repo, opens or updates the merge request (target `<major>.x` if that branch
+exists, else `main`), and comments the link once on the project's pull request. The integrity check (module branch ==
+project folder) runs **before** the push. Re-running is safe.
+
+Verified here: `shop-a` branch `feature/promo-banner` (in-place edit of `ait_banners` locked to `v1.0.1`) produced
+`activit/ait_banners#1`; re-runs update the same MR; `shop-b` (no drift) sends nothing; the job ran on the runner with
+only `run:` steps; the bot token is passed through `GIT_CONFIG_*` env so it never appears in URLs or logs.
+Packeton's archive and `git archive` of the tag are identical for this module (no false drift).
+
 ## Browser checks (optional)
 
 `.claude/mcp_settings.json` configures the Chrome DevTools MCP server (`npx chrome-devtools-mcp`) so Claude Code can
@@ -119,6 +136,7 @@ open the DDEV sites, click through the Drupal admin and take screenshots. Needs 
 lab                    CLI entry point          lab.manifest   repos to create/clone
 ops/docker-compose.yml stack (pinned images)    ops/runner/    runner image + act_runner config
 ops/bin/               bootstrap, sync, smoke,  ops/.state/    generated tokens (gitignored)
-                       new-drupal-project       seed/modules/   module source for a fresh lab
+                       new-drupal-project,      seed/            module, ci-tools and project-template sources
+                       site-up                  (pushed to empty repos by ./lab sync)
 modules/  projects/    working clones (gitignored; each is a repo in Gitea)
 ```
