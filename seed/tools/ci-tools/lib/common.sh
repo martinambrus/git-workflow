@@ -31,3 +31,14 @@ api() {
 
 # Fixed bot identity for commits we create.
 bot_git() { git -c user.name="Upstream Bot" -c user.email="bot@example.test" "$@"; }
+
+# install_path PACKAGE  -> module folder relative to the project root (run inside a project checkout)
+install_path() {
+  local proj rel
+  proj=$(git rev-parse --show-toplevel)
+  rel=$(jq -r --arg n "$1" '.packages[]|select(.name==$n)|.["install-path"] // empty' vendor/composer/installed.json 2>/dev/null || true)
+  if [ -n "$rel" ]; then realpath -m --relative-to="$proj" "vendor/composer/$rel"; else echo "web/modules/custom/${1##*/}"; fi
+}
+
+# release_version TAG -> 1.1.0 (strips the leading v)
+release_version() { echo "${1#v}"; }

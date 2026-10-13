@@ -27,9 +27,13 @@ grep -vE '^\s*(#|$)' "$MANIFEST" | while read -r kind name src _; do
     ensure_tag_protection "$org" "$name"
     seed_repo "$org" "$name" "$LAB_ROOT/seed/tools/$name"
   fi
+  if [ "$kind" = project ]; then
+    # opt in to update pull requests (plan 9): every lab project carries the topic
+    api PUT "/repos/$org/$name/topics/activit-project" >/dev/null
+  fi
   if [ "$kind" = module ]; then
     ensure_tag_protection "$org" "$name"
-    seed_repo "$org" "$name" "$LAB_ROOT/seed/modules/$name"
+    seed_repo "$org" "$name" "$LAB_ROOT/seed/modules/$name" "$LAB_ROOT/seed/module-template"
     ensure_pkg_hook "$name"
     register_package "$name"
   fi

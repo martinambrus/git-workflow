@@ -71,17 +71,21 @@ register_package() { local name=$1; load_secrets
     -d "{\"repository\":\"http://$GITEA_HOST:3000/$MODULE_ORG/$name.git\",\"repoType\":\"vcs\"}" | jq -r '"   registered in Packeton: \(.name // .message)"'
 }
 
-# seed_repo ORG NAME SEED_DIR -> if the repo is still empty and SEED_DIR exists, push it as the first commit and
-# tag v1.0.0 (as admin: only main devs may tag). Lets a fresh lab start from known code.
-seed_repo() { local org=$1 name=$2 seed=$3
+# seed_repo ORG NAME SEED_DIR [TEMPLATE_DIR] -> if the repo is still empty and SEED_DIR exists, push TEMPLATE_DIR +
+# SEED_DIR as the first commit and tag it (as admin: only main devs may tag). Tags come from SEED_DIR.tags
+# (space separated, default v1.0.0). Lets a fresh lab start from known code.
+seed_repo() { local org=$1 name=$2 seed=$3 template=${4:-}
   [ -d "$seed" ] || return 0
   [ "$(api GET "/repos/$org/$name/branches" | jq 'length')" = 0 ] || return 0
+  local tags=v1.0.0; [ -f "$seed.tags" ] && tags=$(cat "$seed.tags")
   local tmp; tmp=$(mktemp -d)
+  [ -n "$template" ] && [ -d "$template" ] && cp -a "$template/." "$tmp/"
   cp -a "$seed/." "$tmp/"
   ( cd "$tmp" && git init -q -b main && git config user.name "Main Dev" && git config user.email "admin@example.test" \
-    && git add -A && git commit -qm "Initial commit (seeded by ./lab sync)" && git tag -a v1.0.0 -m "First release" \
-    && git push -q "http://$ADMIN:$ADMIN_PW@$GITEA_HOST:3000/$org/$name.git" main v1.0.0 ) \
-    && echo "   seeded $org/$name from ${seed#$LAB_ROOT/}, tagged v1.0.0"
+    && git add -A && git commit -qm "Initial commit (seeded by ./lab sync)" \
+    && for t in $tags; do git tag -a "$t" -m "Release $t"; done \
+    && git push -q "http://$ADMIN:$ADMIN_PW@$GITEA_HOST:3000/$org/$name.git" main $tags ) \
+    && echo "   seeded $org/$name from ${seed#$LAB_ROOT/}, tagged $tags"
   rm -rf "$tmp"
 }
 

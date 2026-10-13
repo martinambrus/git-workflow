@@ -16,3 +16,13 @@ repository at a fixed tag and run a script (plan 2.4).
 ```
 
 Tags are immutable; change a script and tag a new version, then bump the tag in the workflow stubs.
+
+## Release and Update PRs (v1.1.0)
+
+| Script | Run in | What it does |
+| --- | --- | --- |
+| `bin/release.sh` | module repo, tag `v*` | checks the tag and `composer.json`, waits until Packeton lists the version, then runs Update PRs; pre-release tags (`-rc.N`) stop after the checks |
+| `bin/update-prs.sh <pkg> <tag>` | called by Release (or by hand) | for every repo with topic `activit-project`: `composer update <pkg>`, commit incl. `vendor/`, open PR `update/<module>-<ver>`; skips projects that do not require it, are already on it, are frozen, or whose constraint does not allow it |
+
+Composer runs with a private cache and the job fails when Packeton answers 401 (Composer would otherwise fall back to stale
+cache silently).

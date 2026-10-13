@@ -71,7 +71,7 @@ Verified through a full release cycle: MR merged, tag `v1.1.0`, Packeton indexed
 developed the change (`shop-a`) `composer update` moved only `composer.lock` and Composer's vendor metadata, the module
 folder stayed identical (plan 9.3) and the Upstream job then reported no drift; on `shop-b` the diff was exactly the
 release (5 module files), `drush updb`/`cr` were clean, and the new "Promo badge" field appeared in the admin form.
-Not yet verified: `dev-up/...` branch installs, customer limits, the Release and Update-PR workflows.
+Not yet verified: `dev-up/...` branch installs, customer limits, frozen/out-of-range projects in Update PRs.
 
 5. **`drupal/recommended-project` ships no `.gitignore`**, so Drupal's runtime `web/sites/default/files/` would be
    committed (twig cache, `.htaccess` files). The projects add `web/sites/default/files/` and nothing else
@@ -135,6 +135,25 @@ Verified here: `shop-a` branch `feature/promo-banner` (in-place edit of `ait_ban
 `activit/ait_banners#1`; re-runs update the same MR; `shop-b` (no drift) sends nothing; the job ran on the runner with
 only `run:` steps; the bot token is passed through `GIT_CONFIG_*` env so it never appears in URLs or logs.
 Packeton's archive and `git archive` of the tag are identical for this module (no false drift).
+
+## Release and Update PRs jobs
+
+`ci-tools` **v1.1.0** adds `bin/release.sh` and `bin/update-prs.sh`. The stub is
+`seed/module-template/.gitea/workflows/release.yml` (module repos, on tag `v*`); projects opt in with the repository
+topic `activit-project` (`./lab sync` sets it on every project in the manifest).
+
+Verified with a real patch release (`v1.1.1`, an `aria-label` fix developed in place in `shop-a`): push -> Upstream MR
+-> merge -> tag as `admin` -> Release job checked the tag, waited for Packeton, and opened `update/ait_banners-1.1.1`
+PRs in **both** projects (authored by `bot`, body with the module diff stat and the 9.3/9.4 checklist) with no manual
+step. Merging them worked, `shop-a`'s own fix branch stayed mergeable (identical content), and `shop-b` then served
+the new markup. Re-running does nothing ("already on 1.1.1"); a malformed tag fails the job; an `-rc.1` tag stops after
+the checks and opens no PRs.
+
+10. In the project that developed the change the update PR only shows the release in the module folder **if the fix
+    is not on `main` yet**; here `shop-a#2` showed the one-line template change because the fix was still on its
+    feature branch. Both merge cleanly because the content is identical.
+11. The Release job needs `composer` in the runner image (it validates `composer.json` and runs `composer update`
+    for every project), and the bot needs write access to the project repos (team `devs` in org `sites`).
 
 ## Browser checks (optional)
 

@@ -1,0 +1,22 @@
+name: release
+# On a release tag: check it, wait until Packeton lists it, then open update pull requests in opted-in projects
+# (repository topic activit-project). Plain shell steps from ci-tools, no `uses:` (plan 2.4).
+on:
+  push:
+    tags: ['v*']
+
+jobs:
+  release:
+    runs-on: activit-runner
+    steps:
+      - name: Release
+        env:
+          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+          PACKETON_TOKEN: ${{ secrets.PACKETON_TOKEN }}
+        run: |
+          set -euo pipefail
+          git clone -q --depth 1 --branch v1.1.0 \
+            "http://bot:${BOT_TOKEN}@gitea.test:3000/activit/ci-tools.git" /tmp/ci-tools
+          export GITEA_URL="${{ github.server_url }}" REPOSITORY="${{ github.repository }}" \
+                 TAG="${{ github.ref_name }}" PACKETON_URL="http://packeton.test"
+          /tmp/ci-tools/bin/release.sh
