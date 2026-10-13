@@ -64,12 +64,20 @@ ensure_pkg_hook() { local name=$1; load_secrets
 
 # register_package NAME -> adds the module repo to Packeton once it has a composer.json on main (plan 4.3)
 register_package() { local name=$1; load_secrets
+  # a freshly seeded repo may not serve its files for a moment (see wait_for_branch)
+  local i; for i in 1 2 3 4 5; do [ "$(http_code GET "/repos/$MODULE_ORG/$name/raw/composer.json?ref=main")" = 200 ] && break; [ "$(http_code GET "/repos/$MODULE_ORG/$name/branches/main")" = 200 ] && break; sleep 1; done
   [ "$(http_code GET "/repos/$MODULE_ORG/$name/raw/composer.json?ref=main")" = 200 ] || { echo "   $name: no composer.json on main yet, not registering"; return 0; }
   local have; have=$(curl -s -o /dev/null -w '%{http_code}' "$PACKETON/api/packages/$MODULE_ORG/$name?username=admin&apiToken=$PACKETON_TOKEN")
   [ "$have" = 200 ] && return 0
   curl -sS -X POST "$PACKETON/api/create-package?username=admin&apiToken=$PACKETON_TOKEN" -H 'Content-Type: application/json' \
     -d "{\"repository\":\"http://$GITEA_HOST:3000/$MODULE_ORG/$name.git\",\"repoType\":\"vcs\"}" | jq -r '"   registered in Packeton: \(.name // .message)"'
 }
+
+# wait_for_branch ORG NAME BRANCH [SECONDS] -> Gitea records a pushed branch asynchronously: the API (and with it
+# protection, raw file reads, registration) only sees it a moment later. Seen on fresh labs, so wait explicitly.
+wait_for_branch() { local org=$1 name=$2 br=$3 t=${4:-60} i
+  for i in $(seq 1 "$t"); do [ "$(http_code GET "/repos/$org/$name/branches/$br")" = 200 ] && return 0; sleep 1; done
+  echo "   warning: $org/$name:$br not visible via the API after ${t}s" >&2; return 1; }
 
 # seed_repo ORG NAME SEED_DIR [TEMPLATE_DIR] -> if the repo is still empty and SEED_DIR exists, push TEMPLATE_DIR +
 # SEED_DIR as the first commit and tag it (as admin: only main devs may tag). Tags come from SEED_DIR.tags
@@ -87,6 +95,7 @@ seed_repo() { local org=$1 name=$2 seed=$3 template=${4:-}
     && git push -q "http://$ADMIN:$ADMIN_PW@$GITEA_HOST:3000/$org/$name.git" main $tags ) \
     && echo "   seeded $org/$name from ${seed#$LAB_ROOT/}, tagged $tags"
   rm -rf "$tmp"
+  wait_for_branch "$org" "$name" main
 }
 
 # ddev_composer_auth -> (re)write Packeton credentials into DDEV's global Composer config. Needed after every lab

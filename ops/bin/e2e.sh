@@ -46,6 +46,12 @@ curl -fsS "$GITEA/api/v1/version" >/dev/null 2>&1 && ok "Gitea is up" || die "st
 load_secrets
 [ -n "${PACKETON_TOKEN:-}" ] && ok "lab secrets present" || die "no secrets: run ./lab up"
 
+step "1a. module registered in Packeton"
+"$LAB_ROOT/ops/bin/sync.sh" >/dev/null 2>&1          # idempotent: heals anything ./lab up missed
+pk_versions() { curl -s -u "admin:$PACKETON_TOKEN" "$PACKETON/p2/$MODULE_ORG/ait_banners.json" | jq -r '[.packages["'$MODULE_ORG'/ait_banners"][]?.version]|join(" ")'; }
+wait_for 180 "ait_banners indexed in Packeton" bash -c "[ -n \"\$(curl -s -u admin:$PACKETON_TOKEN $PACKETON/p2/$MODULE_ORG/ait_banners.json | jq -r '.packages[\"$MODULE_ORG/ait_banners\"][0].version // empty')\" ]" \
+  && ok "activit/ait_banners is in Packeton: $(pk_versions)" || die "activit/ait_banners is not in Packeton (registration or indexing failed)"
+
 step "1. projects exist (scaffold if missing)"
 for p in shop-a shop-b; do
   dir=$LAB_ROOT/projects/$p
