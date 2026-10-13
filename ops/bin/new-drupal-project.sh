@@ -69,7 +69,8 @@ git check-ignore -v vendor web/core web/modules/contrib web/modules/custom && { 
 # workflow stubs from the project template (plan 2.5 / section 12)
 cp -a "$LAB_ROOT/seed/project-template/." .
 # runtime files only: everything else (vendor/, web/core, modules) is committed on purpose
-printf '%s\n' "web/sites/default/files/" > .gitignore
+# (config/sync/.htaccess is written by Drupal lazily, after our commit, and would leave the tree dirty)
+printf '%s\n' "web/sites/default/files/" "config/sync/.htaccess" > .gitignore
 git add -A
 git commit -qm "Initial project: Drupal 11, Packeton repository, activit/ait_banners, vendor and web committed"
 git push -u origin main 2>&1 | grep -v '^remote:' | tail -2

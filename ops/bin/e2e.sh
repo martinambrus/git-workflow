@@ -90,7 +90,7 @@ echo "   latest release v$cur, will release v$next"
 A=$LAB_ROOT/projects/shop-a; B=$LAB_ROOT/projects/shop-b
 for d in "$A" "$B"; do
   git -C "$d" fetch -q origin && git -C "$d" switch -q main && git -C "$d" pull -q --ff-only origin main || die "cannot update $d"
-  [ -z "$(git -C "$d" status --porcelain)" ] || die "$d has local changes: commit or stash them first"
+  [ -z "$(git -C "$d" status --porcelain)" ] || die "$d has local changes (commit or stash them): $(git -C "$d" status --porcelain | head -5 | tr '\n' ' ')"
 done
 
 echo "/* $marker: edited in place in shop-a */" >> "$A/web/modules/custom/ait_banners/css/banner.css"
