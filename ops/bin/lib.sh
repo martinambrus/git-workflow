@@ -119,11 +119,14 @@ ensure_main_protection() { local org=$1 name=$2
   fi
 }
 
-# ensure_release_line_protection ORG NAME -> every maintenance branch (1.x, 2.x, 10.x, 1.2.x ...) gets the same rule as
-# main (PR only, Checks required, admins included) as soon as it exists, via one glob rule. Gitea matches the glob
-# against the branch name; `feat.x` is not matched, `9.x` is.
+# ensure_release_line_protection ORG NAME -> every maintenance branch (1.x, 2.x, 10.x, 1.2.x ...) is protected as soon
+# as it exists, via ONE glob rule (Gitea matches the glob against the branch name: `9.x` is matched, `feat.x` is not).
+# Creating a branch is a push, so a rule that forbids pushes would also forbid creating the line; therefore the main
+# dev (the account that may create release tags) is on the push whitelist, exactly like for tags. Everybody else,
+# including developers and the bot, can only change a release line through a pull request with Checks.
 ensure_release_line_protection() { local org=$1 name=$2 rule='[0-9]*.x'
-  local body='{"rule_name":"[0-9]*.x","enable_push":false,"enable_status_check":true,"status_check_contexts":["checks / checks (pull_request)"],"required_approvals":0}'
+  local body; body=$(jq -n --arg u "$ADMIN" '{rule_name:"[0-9]*.x",enable_push:true,enable_push_whitelist:true,push_whitelist_usernames:[$u],
+      enable_status_check:true,status_check_contexts:["checks / checks (pull_request)"],required_approvals:0}')
   local enc; enc=$(printf '%s' "$rule" | jq -sRr @uri)
   if [ "$(http_code GET "/repos/$org/$name/branch_protections/$enc")" = 200 ]; then
     api PATCH "/repos/$org/$name/branch_protections/$enc" "$body" >/dev/null

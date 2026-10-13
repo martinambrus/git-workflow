@@ -58,11 +58,15 @@ find_pr() { # repo head-prefix base -> number of the newest open PR with that he
 wait_pr() { local n=0 r; while [ "$n" -lt "$4" ]; do r=$(find_pr "$1" "$2" "$3"); [ -n "$r" ] && { echo "$r"; return 0; }; n=$((n+5)); sleep 5; done; return 1; }
 find_issue() { # repo title-fragment -> number of an open issue
   api GET "/repos/$1/issues?state=open&type=issues&limit=50" | jq -r --arg t "$2" '[.[]|select(.title|contains($t))]|first|.number // empty'; }
-direct_push_rejected() { # repo branch -> success when a direct push as the main dev is refused (branch protection)
+direct_push_rejected() { # repo branch -> success when a direct push by a DEVELOPER (not a main dev) is refused
   local d; d=$(mktemp -d -p "$WORK")
-  git clone -q --depth 1 --branch "$2" "$(admin_url "$1")" "$d/c" 2>/dev/null || return 1
+  git clone -q --depth 1 --branch "$2" "$(dev_url "$1")" "$d/c" 2>/dev/null || return 1
   ( cd "$d/c" && git config user.name x && git config user.email x@x.test && echo "# direct" >> DIRECT.md \
       && git add -A && git commit -qm direct && ! git push -q origin "$2" ) >/dev/null 2>&1; }
+create_line_rejected() { # repo new-branch -> success when a DEVELOPER cannot create a release line
+  local d; d=$(mktemp -d -p "$WORK")
+  git clone -q --depth 1 "$(dev_url "$1")" "$d/c" 2>/dev/null || return 1
+  ! ( cd "$d/c" && git push -q origin "HEAD:refs/heads/$2" ) >/dev/null 2>&1; }
 merge_forward_pr() { # repo number -> wait for Checks on its head, then merge
   local h; h=$(api GET "/repos/$1/pulls/$2" | jq -r .head.ref)
   wait_for 600 "Checks on $1#$2" is_success "$1" "$h" && merge_pr "$1" "$2"; }
@@ -165,8 +169,10 @@ step "L3. 2.0.0 (breaking) released on main, 1.x line created from v1.0.1"
 api POST "/repos/$PBASE/branches" '{"new_branch_name":"1.x","old_ref_name":"v1.0.1"}' >/dev/null
 wait_for_branch "$MODULE_ORG" "$BASE" 1.x 60 >/dev/null 2>&1
 [ "$(http_code GET "/repos/$PBASE/branches/1.x")" = 200 ] && ok "maintenance branch 1.x created from v1.0.1" || die "1.x missing"
-direct_push_rejected "$PBASE" 1.x && ok "1.x is protected automatically (direct push by the main dev refused; no rule was created for it by hand)" \
-  || bad "1.x accepted a direct push: release lines are not protected"
+direct_push_rejected "$PBASE" 1.x && ok "1.x is protected automatically: a developer's direct push is refused (no rule was created for it by hand)" \
+  || bad "1.x accepted a developer's direct push: release lines are not protected"
+create_line_rejected "$PBASE" "8.x" && ok "a developer cannot create a release line (only the main dev can); the main dev just did" \
+  || bad "a developer could create the release line 8.x"
 edit_major() { jq '.require["drupal/core"]="^11"' composer.json > c.tmp && mv c.tmp composer.json; echo "// $ts: 2.0.0" >> ait_banners.module; }
 module_change "$PBASE" main "rel/2.0.0" "Breaking: require Drupal 11" edit_major && tag_release "$PBASE" main v2.0.0 \
   && wait_for 180 "v2.0.0 indexed" pk_has "$PBASE" v2.0.0 && ok "v2.0.0 released on main" || die "cannot release v2.0.0"
@@ -177,7 +183,7 @@ done
 # the 2.x line, so that the forward-port chain 1.x -> 2.x -> main exists
 api POST "/repos/$PBASE/branches" '{"new_branch_name":"2.x","old_ref_name":"v2.0.0"}' >/dev/null
 wait_for_branch "$MODULE_ORG" "$BASE" 2.x 60 >/dev/null 2>&1
-direct_push_rejected "$PBASE" 2.x && ok "2.x is protected automatically as well" || bad "2.x accepted a direct push"
+direct_push_rejected "$PBASE" 2.x && ok "2.x is protected automatically as well" || bad "2.x accepted a developer's direct push"
 
 step "L4. the extension (requires base ^1.0) blocks the major upgrade"
 d=$WORK/blk; git clone -q "$(dev_url "$SITE_ORG/$P_OLD")" "$d" 2>/dev/null
