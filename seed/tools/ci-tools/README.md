@@ -26,3 +26,14 @@ Tags are immutable; change a script and tag a new version, then bump the tag in 
 
 Composer runs with a private cache and the job fails when Packeton answers 401 (Composer would otherwise fall back to stale
 cache silently).
+
+## Checks (v1.2.0)
+
+| Script | Run in | What it does |
+| --- | --- | --- |
+| `bin/check-project.sh` | project repo, PRs into `main` + every push | 1 gitlinks / nested `.git`, 2 symlinks outside the project, 3 `dev-`/pre-release `activit/*` in the lock, 4 drift: reinstall from `composer.lock` in a clean checkout and compare |
+| `bin/check-module.sh` | module repo, PRs | `composer.json` rules, PHP and YAML syntax |
+
+Drift is a warning on plain branch pushes (own modules only) and a failure on PRs into `main` and on `main`. Composer's
+generated files (autoloader suffix, `include_paths` order, hash constants) and CR-at-EOL differences are not compared
+byte for byte; instead `vendor/composer/installed.json` is checked against `composer.lock`.

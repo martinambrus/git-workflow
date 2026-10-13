@@ -3,3 +3,5 @@
 .ait-banner__logo { max-height: 2.5rem; }
 .ait-banner__sponsor { font-weight: 600; }
 .ait-banner__tagline { color: #57606a; }
+.ait-banner__promo { margin-left: auto; padding: 0.15rem 0.5rem; border-radius: 999px; background: #d1242f; color: #fff; font-size: 0.8rem; font-weight: 600; }
+.ait-banner__promo { letter-spacing: 0.02em; }

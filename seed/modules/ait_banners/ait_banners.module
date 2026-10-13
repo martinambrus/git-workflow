@@ -16,6 +16,7 @@ function ait_banners_theme(): array {
         'tagline' => '',
         'url' => '',
         'image_url' => '',
+        'promo' => '',
       ],
       'template' => 'ait-banners-banner',
     ],

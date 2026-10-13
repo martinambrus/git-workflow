@@ -28,6 +28,7 @@ class SponsorshipBannerBlock extends BlockBase {
       'tagline' => '',
       'url' => 'https://example.com',
       'image_url' => '',
+      'promo' => '',
     ];
   }
 
@@ -57,6 +58,13 @@ class SponsorshipBannerBlock extends BlockBase {
       '#title' => $this->t('Logo URL'),
       '#default_value' => $this->configuration['image_url'],
     ];
+    $form['promo'] = [
+      '#type' => 'textfield',
+      '#title' => $this->t('Promo badge'),
+      '#description' => $this->t('Short promotional text shown as a badge, e.g. "-20% this week". Leave empty for none.'),
+      '#default_value' => $this->configuration['promo'],
+      '#maxlength' => 40,
+    ];
     return $form;
   }
 
@@ -64,7 +72,7 @@ class SponsorshipBannerBlock extends BlockBase {
    * {@inheritdoc}
    */
   public function blockSubmit($form, FormStateInterface $form_state): void {
-    foreach (['sponsor', 'tagline', 'url', 'image_url'] as $key) {
+    foreach (['sponsor', 'tagline', 'url', 'image_url', 'promo'] as $key) {
       $this->configuration[$key] = $form_state->getValue($key);
     }
   }
@@ -79,6 +87,7 @@ class SponsorshipBannerBlock extends BlockBase {
       '#tagline' => $this->configuration['tagline'],
       '#url' => $this->configuration['url'],
       '#image_url' => $this->configuration['image_url'],
+      '#promo' => $this->configuration['promo'],
       '#attached' => ['library' => ['ait_banners/banner']],
     ];
   }

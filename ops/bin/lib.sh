@@ -95,3 +95,14 @@ ddev_composer_auth() { load_secrets
   ddev composer config --global http-basic.packeton.test admin "$PACKETON_TOKEN" >/dev/null 2>&1 \
     || ( cd "$1" && ddev composer config --global http-basic.packeton.test admin "$PACKETON_TOKEN" >/dev/null )
 }
+
+# ensure_main_protection ORG NAME -> plan 2.1: main takes merge requests only, and the Checks job must pass.
+# Applies to admins too (otherwise the main dev could push straight to main).
+ensure_main_protection() { local org=$1 name=$2
+  local body='{"rule_name":"main","enable_push":false,"enable_status_check":true,"status_check_contexts":["checks / checks (pull_request)"],"required_approvals":0,"apply_to_admins":true}'
+  if [ "$(http_code GET "/repos/$org/$name/branch_protections/main")" = 200 ]; then
+    api PATCH "/repos/$org/$name/branch_protections/main" "$body" >/dev/null
+  else
+    api POST "/repos/$org/$name/branch_protections" "$body" | jq -r '.rule_name // .message' | sed 's/^/   protected: /'
+  fi
+}

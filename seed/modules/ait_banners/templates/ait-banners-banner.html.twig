@@ -8,12 +8,14 @@
  * - tagline: Short text.
  * - url: Link target.
  * - image_url: Optional logo URL.
+ * - promo: Optional promotional badge text.
  */
 #}
-<aside class="ait-banner" data-ait-banner="sponsorship">
+<aside class="ait-banner" data-ait-banner="sponsorship" aria-label="{{ 'Sponsored by @sponsor'|t({'@sponsor': sponsor}) }}">
   <a class="ait-banner__link" href="{{ url }}" rel="sponsored noopener">
     {% if image_url %}<img class="ait-banner__logo" src="{{ image_url }}" alt="{{ sponsor }}">{% endif %}
     <span class="ait-banner__sponsor">{{ sponsor }}</span>
+    {% if promo %}<span class="ait-banner__promo">{{ promo }}</span>{% endif %}
     {% if tagline %}<span class="ait-banner__tagline">{{ tagline }}</span>{% endif %}
   </a>
 </aside>

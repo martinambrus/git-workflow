@@ -37,6 +37,7 @@ grep -vE '^\s*(#|$)' "$MANIFEST" | while read -r kind name src _; do
     ensure_pkg_hook "$name"
     register_package "$name"
   fi
+  case $kind in module|project) ensure_main_protection "$org" "$name" ;; esac
   [ $can_clone = 1 ] || continue
   url="http://$DEV:$DEV_PW@$GITEA_HOST:3000/$org/$name.git"
   if [ -d "$dir/.git" ]; then

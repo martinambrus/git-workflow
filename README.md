@@ -71,7 +71,7 @@ Verified through a full release cycle: MR merged, tag `v1.1.0`, Packeton indexed
 developed the change (`shop-a`) `composer update` moved only `composer.lock` and Composer's vendor metadata, the module
 folder stayed identical (plan 9.3) and the Upstream job then reported no drift; on `shop-b` the diff was exactly the
 release (5 module files), `drush updb`/`cr` were clean, and the new "Promo badge" field appeared in the admin form.
-Not yet verified: `dev-up/...` branch installs, customer limits, frozen/out-of-range projects in Update PRs.
+Not yet verified: customer limits (plan 10), HTTPS, external reachability.
 
 5. **`drupal/recommended-project` ships no `.gitignore`**, so Drupal's runtime `web/sites/default/files/` would be
    committed (twig cache, `.htaccess` files). The projects add `web/sites/default/files/` and nothing else
@@ -155,6 +155,34 @@ the checks and opens no PRs.
 11. The Release job needs `composer` in the runner image (it validates `composer.json` and runs `composer update`
     for every project), and the bot needs write access to the project repos (team `devs` in org `sites`).
 
+## Checks job and `main` protection (ci-tools v1.2.0)
+
+`bin/check-project.sh` (projects, on PRs into `main` and on every push) implements plan checks 1-4; `bin/check-module.sh`
+(module repos, on PRs, including the Upstream MRs) checks `composer.json`, PHP and YAML syntax (the `yaml` PHP
+extension was added to the runner image; it would have caught the `v1.0.0` `info.yml` bug). `./lab sync` protects `main`
+in every module and project: merge by PR only, status `checks / checks (pull_request)` required, **also for admins**.
+
+Verified on the real runner and Gitea: direct pushes to `main` are rejected for `dev` and `admin`; a harmless PR passes
+and merges; a PR with an unreleased in-place edit of the shared module gets `failure` and the merge is refused
+(`405 Not all required status checks successful`) while the same branch's *push* check is only a warning; symlink
+outside the project, gitlink and `dev-main` of our module in the lock all fail the PR check (negative tests on a
+local bare repo); the bot's own update PR passes the gate; a project pinned to `1.1.1` is skipped by Update PRs
+("its constraint '1.1.1' does not allow 1.1.2") while the other project gets its PR; `dev-up/<project>/<branch>`
+installs from Packeton into a real project (`composer require activit/ait_banners:dev-up/...@dev`).
+
+12. **Plan check 4 needs refining: `vendor/` is not byte-reproducible.** After a clean `composer install` from the lock,
+    real package code was identical, but Composer's *generated* files differed: the autoloader suffix
+    (`ComposerAutoloaderInit<hash>`), the order of `include_paths.php`, `DrupalInstalled::VERSIONS_HASH`, and the root
+    package's own `reference`; one shipped file differed only by CRLF vs LF. A naive "reinstall and diff everything"
+    fails on every project. The check compares package files, ignores Composer-generated metadata and CR-at-EOL, and
+    instead verifies that the committed `vendor/composer/installed.json` matches `composer.lock`.
+13. **Packeton keeps versions of deleted branches** (`dev-up/shop-b/test-inplace-drift` was still listed after the
+    branch was deleted in Gitea). Harmless, but `dev-up/...` versions pile up; plan section 11 should mention cleanup.
+14. **Checks are heavy**: each run reinstalls Drupal core (about a minute locally). The runner has `capacity: 2` and
+    queued runs wait; push and PR events both fire for a PR branch. Fine for a pilot, size the runners accordingly.
+15. Branch protection status contexts are named `<workflow> / <job> (<event>)`, here `checks / checks (pull_request)`;
+    they only exist after the first run, so the stub must be on `main` before the rule can be meaningfully required.
+
 ## Browser checks (optional)
 
 `.claude/mcp_settings.json` configures the Chrome DevTools MCP server (`npx chrome-devtools-mcp`) so Claude Code can
@@ -169,6 +197,7 @@ lab                    CLI entry point          lab.manifest   repos to create/c
 ops/docker-compose.yml stack (pinned images)    ops/runner/    runner image + act_runner config
 ops/bin/               bootstrap, sync, smoke,  ops/.state/    generated tokens (gitignored)
                        new-drupal-project,      seed/            module, ci-tools and project-template sources
-                       site-up                  (pushed to empty repos by ./lab sync)
+                       site-up                  (pushed to empty repos by ./lab sync;
+                                                 module-template holds the module workflow stubs)
 modules/  projects/    working clones (gitignored; each is a repo in Gitea)
 ```

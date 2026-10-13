@@ -14,3 +14,6 @@ block.settings.ait_banners_sponsorship:
     image_url:
       type: string
       label: 'Logo URL'
+    promo:
+      type: label
+      label: 'Promo badge'
