@@ -55,18 +55,20 @@ the findings differ from what you see on a replay.
 
 Run on disposable, uniquely named modules and minimal Composer projects (not shop-a/shop-b), so the version-line
 logic is isolated and the scenario is re-runnable; everything goes through the real pipeline (Upstream, Release,
-Update PRs, Checks, protected branches, Packeton grants). 68 assertions:
+Update PRs, Checks, protected branches, Packeton grants). 78 assertions:
 
 | Variant | Expected and verified |
 | --- | --- |
 | `2.0.0` (breaking) released on `main`, `1.x` cut from the last 1.x tag | the Release job succeeds and opens **no** update PR in any project on `^1.0`, nor in an opted-out or pinned one |
 | Shared **extension package** (own repo, own Packeton package) requiring the base `^1.0` | `composer require base:^2.0` is refused because of the extension; the extension's own `2.0.0` needs base `^2.0`; the client then moves both together in one PR |
 | Client deliberately moves to 2.x | by `composer require ^2.0` through a PR; stays on 1.0.1 until then |
-| In-place fix by a client locked to 1.x | the Upstream MR targets the **`1.x`** branch (not `main`), module Checks run on that PR, tag `v1.0.2` is placed on `1.x`, update PRs reach only 1.x clients that opted in |
+| In-place fix by a client locked to 1.x | the Upstream MR targets the **`1.x`** branch (not `main`), module Checks run on that PR, tag `v1.0.2` is placed on `1.x`, update PRs reach only 1.x clients that opted in; the fix is then **forward-ported automatically** `1.x -> 2.x -> main` |
+| Release lines are protected without anyone creating a rule | a developer's direct push to `1.x`/`2.x` is refused and a developer cannot create a line; the main dev can |
+| A change on `1.x` that conflicts with `2.x` | the Forward-port job opens an issue (no PR, job fails) |
 | Client whose support expired (no `activit-project` topic) / client pinned to exactly `1.0.1` | no update PRs for 1.x or 2.x releases |
 | External customer, grant `<2.0`, `expiredUpdatesAt` in the past | sees exactly the releases from before the date; no 1.0.2, no 2.0.0; `composer` resolves the newest allowed; cannot resolve `^2.0`; anonymous: 401 |
 | Same customer **re-subscribes** (grant widened, expiry cleared) | now sees 1.0.2 and 2.0.0; `composer update` stays on 1.x because the constraint is still `^1.0`; moves to 2.0 only by a deliberate `require ^2.0` |
-| Internal client re-subscribes (topic added back) | receives the next 1.x patch release, then migrates to 2.0; its next in-place edit targets the **`2.x`** branch; a `2.0.1` tagged on `2.x` reaches every opted-in 2.x client |
+| Internal client re-subscribes (topic added back) | receives the next 1.x patch release, then migrates to 2.0; its next in-place edit targets the **`2.x`** branch; a `2.0.1` tagged on `2.x` reaches every opted-in 2.x client; the client's `2.x` fix is forward-ported to `main` |
 
 29. **Real bug in the Upstream job since `v1.0.0`, found by this scenario:** the bot branch was cut from the module
     repository's *current default branch* instead of the locked tag (the script said "cut from the tag"). It only
@@ -74,15 +76,21 @@ Update PRs, Checks, protected branches, Packeton grants). 68 assertions:
     (`patch does not apply`). Fixed in `ci-tools` **v1.3.1**; bump `upstream.yml` in existing projects.
 30. The plan's rule "1.x if that branch exists, otherwise main" generalises to **`<locked major>.x` if it exists**;
     verified for both `1.x` and `2.x`.
-31. **Maintenance branches are not protected automatically**: `./lab sync` protects `main` only. A real release line
-    needs the same rule (PR only, Checks required) on `1.x`/`2.x`; the scenario creates it explicitly. Plan section 11
-    should say so. The module `checks.yml` already triggers on PRs into `*.x`.
+31. **Maintenance branches are now protected automatically** (was a gap): one glob rule `[0-9]*.x` per module repo,
+    created by `./lab sync`, covers every present and future release line (`feat.x` is not matched). Found while
+    building it: creating a branch is a push, so a rule that forbids pushes also forbids *creating* the line, even for
+    the main dev. The rule therefore whitelists the main-dev account (the same account that may create release
+    tags); developers and the bot can only change a release line through a pull request with Checks, and a developer
+    cannot create a line (both asserted by the e2e). Decision for the plan: main devs may push to release lines.
 32. **Re-subscription is two separate decisions**: widening the grant (Packeton) lets the client *see* 2.x, but
     nothing moves until the project's constraint changes; and a client on 1.x keeps receiving 1.x fixes only. That is
     the behaviour the plan wants, but it means "re-subscribing" needs an explicit migration PR on the client side.
-33. A `2.x` fix developed in a client lands on the `2.x` branch only; **forward-porting to `main` is not automated**
-    (the plan mentions it as a manual follow-up).
-
+33. **Forward-porting is now automated** (was a gap): `ci-tools` **v1.4.0** `forward-port.sh`, triggered by a push to a
+    `*.x` branch, cherry-picks each new change (a merged MR is taken with `-m 1`) onto the **next higher** line, or the
+    default branch if there is none, as a PR `fwd/<src>/<sha>-to-<target>`. Merging it triggers the next hop, so a fix
+    flows `1.x -> 2.x -> main`. A change that does not apply opens an **issue** naming the files (and fails the job)
+    instead of guessing; already-applied changes are skipped; re-runs are idempotent. Verified: clean two-hop chain,
+    a deliberately conflicting change (issue, no PR), and a client's 2.x fix reaching `main`.
 34. **One unexplained intermittent failure.** Of the full from-scratch runs with these scenarios, one (the 2nd) failed
     in the release-line part: the `new` client's migration PR to 2.0 failed immediately (instant failure, not a
     Checks timeout) and the lock read for that repo came back empty. The identical commit then passed in 6 further runs

@@ -22,7 +22,7 @@ Legend: **FIX** the plan is wrong or fails as written · **ADD** missing rule or
 | 9 | 4.3, 4.4 | **CLARIFY** | Register the package first, then tag; allow for async visibility of new branches | F6, F25, F27 |
 | 10 | 10 | **ADD** | Packeton leaks the internal Gitea clone URL to customers | F16 |
 | 11 | 10 | **CLARIFY** | Two different expiries; re-subscription is a grant change **plus** a deliberate migration | F17, F32 |
-| 12 | 11 ("fix for an old release line"), 6.5 | **ADD** | Generalise to `<major>.x`; protect maintenance branches; forward-porting is manual | F30, F31, F33 |
+| 12 | 11 ("fix for an old release line"), 6.5 | **ADD** | Generalise to `<major>.x`; release lines are auto-protected (glob rule); fixes are forward-ported automatically (1.x -> 2.x -> main), conflicts become issues | F30, F31, F33 |
 | 13 | 11 ("test unreleased code") | **ADD** | `dev-up/...` works; add `@dev`, cleanup of bot branches and of Packeton's stale dev versions | F13, F18 |
 | 14 | 12 (Release, Update PRs) | **ADD** | Runner image needs Composer; pre-releases open no PRs; skip rules for pinned/major/expired | F11, F19 |
 | 15 | 9.3 | **CLARIFY** | The update PR in the developing project only shows no module diff if the fix is already on `main` | F10 |
@@ -150,12 +150,15 @@ a grant constraint (`<1.1`, `<2.0`) is enforced including at `composer require`,
 
 ### Section 11 (special cases)
 
-**12. Old release line (ADD).** Verified end to end with a real `2.0.0` and real `1.x`/`2.x` branches:
-create the line from its last tag **and protect it like `main`** (the lab's `sync` only protects `main`; a release line
-needs "PR only, Checks required" too, and the module `checks.yml` must trigger on `*.x`); the Upstream MR targets that
-branch; tag the patch release **on that branch**; the Release job then opens update PRs only for clients that opted in
-and are on that line (not for `^2.0` clients, opted-out or pinned ones). Forward-porting a fix to `main` is **not
-automated** (manual, as the plan says). *Evidence:* F30 to F33, e2e L3, L6, L9.
+**12. Old release line (ADD).** Verified end to end with a real `2.0.0` and real `1.x`/`2.x` branches, and now
+automated where the pilot first had manual gaps:
+create the line from its last tag (only the main dev can: a push); **protection is automatic** through one glob rule
+`[0-9]*.x` per module repo (PR only, Checks required; the main dev is on the push whitelist because creating the
+branch is a push, like for tags; the module `checks.yml` triggers on `*.x`); the Upstream MR targets that branch;
+tag the patch release **on that branch**; the Release job opens update PRs only for clients that opted in and are on
+that line. **Forward-porting is automated** by the `forward-port` job (ci-tools v1.4.0): a change merged into `1.x` is
+cherry-picked onto the next higher line (or `main`) as a PR, each merge triggers the next hop, and a conflict opens
+an issue instead of guessing. *Evidence:* F30 to F33, e2e L3, L6, L9.
 
 **13. Unreleased code in another project (ADD).** `composer require activit/<m>:dev-up/<project>/<branch>@dev` installs
 exactly the bot branch (verified in a real project, locked to the branch's commit). Add: the `@dev` flag, that
@@ -216,7 +219,8 @@ YAML syntax) behave as specified.
 
 ## 3. Things to add to the decisions list (14.1)
 
-1. **Maintenance branch policy:** which lines exist, who protects and creates them, how long, who forward-ports.
+1. **Maintenance branch policy:** which lines exist and how long they live; the main-dev account that may create/push
+   release lines (whitelisted, like tag creation); who reviews and merges forward-port PRs and handles the conflict issues.
 2. **Customer expiry model:** `expiredUpdatesAt` (freeze) vs account expiry, per contract.
 3. **Where Packeton reads from:** token vs deploy key, and who rotates it (a rotation silently breaks CI without the
    401 check).
