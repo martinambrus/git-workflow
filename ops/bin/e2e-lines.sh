@@ -34,8 +34,15 @@ composer_in() { # dir composer-args...  (runner image, lab network, Packeton aut
 
 pk_versions_of() { curl -s -u "admin:$PACKETON_TOKEN" "$PACKETON/p2/$1.json" | jq -r --arg p "$1" '[.packages[$p][]?.version]|join(" ")'; }
 pk_has() { [[ " $(pk_versions_of "$1") " == *" $2 "* ]]; }
-lock_version() { # repo package -> version in composer.lock on main
-  api GET "/repos/$1/raw/composer.lock?ref=main" | jq -r --arg p "$2" '.packages[]|select(.name==$p)|.version'; }
+lock_version() { # repo package -> version in composer.lock on main (retries: a fresh repo may serve files late)
+  local i out v
+  for i in 1 2 3 4 5 6; do
+    out=$(api GET "/repos/$1/raw/composer.lock?ref=main" 2>&1)
+    v=$(jq -r --arg p "$2" '.packages[]?|select(.name==$p)|.version' <<<"$out" 2>/dev/null)
+    [ -n "$v" ] && { echo "$v"; return; }
+    sleep 3
+  done
+  echo "   lock_version($1): no version after retries; last response: $(echo "$out" | head -c 160)" >&2; }
 pr_exists() { api GET "/repos/$1/pulls?state=all&limit=50" | jq -e --arg h "$2" '.[]|select(.head.ref==$h)' >/dev/null; }
 tag_sha() { git ls-remote "$(admin_url "$1")" "refs/tags/$2^{}" 2>/dev/null | cut -f1; }
 release_result() { # repo tag -> conclusion of the Release run for that tag's commit, or "timeout"
@@ -89,15 +96,16 @@ mk_project() { # name require-json topic(yes|no)  -> minimal Composer project wi
 }
 
 project_change() { # project branch message  cmd...   -> clone, run cmd in the clone (composer via composer_in), PR, Checks, merge
-  local name=$1 br=$2 msg=$3 d n; shift 3
-  d=$(mktemp -d -p "$WORK")
-  git clone -q "$(dev_url "$SITE_ORG/$name")" "$d/c" 2>/dev/null || return 1
+  local name=$1 br=$2 msg=$3 d n log; shift 3
+  d=$(mktemp -d -p "$WORK"); log=$d/steps.log
+  git clone -q "$(dev_url "$SITE_ORG/$name")" "$d/c" 2>>"$log" || { echo "   [$name] clone failed: $(tail -2 "$log")"; return 1; }
   ( cd "$d/c" && git config user.name "Dev One" && git config user.email dev@example.test && git switch -q -c "$br" \
-      && "$@" "$d/c" && git add -A && git commit -qm "$msg" && git push -q origin "$br" ) >/dev/null 2>&1 || return 1
-  n=$(api POST "/repos/$SITE_ORG/$name/pulls" "$(jq -n --arg h "$br" --arg t "$msg" '{title:$t,head:$h,base:"main"}')" | jq -r .number)
-  [ -n "$n" ] && [ "$n" != null ] || return 1
-  wait_for 1200 "Checks on $name#$n" is_success "$SITE_ORG/$name" "$br" || return 1
-  merge_pr "$SITE_ORG/$name" "$n"
+      && "$@" "$d/c" && git add -A && git commit -qm "$msg" && git push -q origin "$br" ) >>"$log" 2>&1 \
+    || { echo "   [$name] change/commit/push failed: $(tail -4 "$log" | tr '\n' ' ')"; return 1; }
+  n=$(api POST "/repos/$SITE_ORG/$name/pulls" "$(jq -n --arg h "$br" --arg t "$msg" '{title:$t,head:$h,base:"main"}')" 2>>"$log" | jq -r .number)
+  [ -n "$n" ] && [ "$n" != null ] || { echo "   [$name] PR creation failed: $(tail -3 "$log" | tr '\n' ' ')"; return 1; }
+  wait_for 1200 "Checks on $name#$n" is_success "$SITE_ORG/$name" "$br" || { echo "   [$name#$n] Checks state: $(pr_status "$SITE_ORG/$name" "$br")"; return 1; }
+  merge_pr "$SITE_ORG/$name" "$n" || { echo "   [$name#$n] merge refused: $(api GET "/repos/$SITE_ORG/$name/pulls/$n" | jq -c '{mergeable,state,merged}')"; return 1; }
 }
 
 # --------------------------------------------------------------------------------------------------------------------
@@ -290,7 +298,7 @@ done
 pr_exists "$SITE_ORG/$P_PIN" "update/$BASE-2.0.1" && bad "$P_PIN (pinned) got a 2.0.1 PR" || ok "$P_PIN: still pinned, no update PR"
 
 step "L10. cleanup"
-if [ "${E2E_KEEP:-0}" = 1 ]; then echo "   E2E_KEEP=1: leaving $BASE, $EXT, l$ts-* and the Packeton customers in place"
+if [ "${E2E_KEEP:-0}" = 1 ] || [ "$FAIL" -gt 0 ]; then echo "   leaving $BASE, $EXT, l$ts-* and the Packeton customers in place for inspection (E2E_KEEP=1 or failures; the next run removes them)"
 else
   for p in "$P_OLD" "$P_EXP" "$P_NEW" "$P_PIN"; do api DELETE "/repos/$SITE_ORG/$p" >/dev/null; done
   for m in "$BASE" "$EXT"; do api DELETE "/repos/$MODULE_ORG/$m" >/dev/null
