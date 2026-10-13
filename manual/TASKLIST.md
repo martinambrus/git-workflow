@@ -244,11 +244,12 @@ key, and name `activit/<repo>`.
   ✅ Packeton lists `v1.0.0` within seconds; in the module repo's *Actions* the **Release** run goes green (no
   projects exist yet, so it opens no PRs). 📸 ⚠ Findings 6 and 27 (order and timing).
 - [ ] **5.5 Branch rules** (repo → *Settings → Branches → Add new rule*):
-  1. pattern `main`: **Disable push**, **Enable status check** with the pattern `checks / checks (pull_request)`.
-  2. pattern `[0-9]*.x` (matches `1.x`, `2.x`, not `feat.x`): same, but **Enable push + whitelist: `admin`**
-     (creating a release line is a push; only the main dev may do it). 📸 both rules
+  1. pattern `main`: **Disable Push**, **Enable Status Check** with the status check pattern `checks / checks (pull_request)`.
+  2. pattern `[0-9]*.x` (matches `1.x`, `2.x`, not `feat.x`): same status check, but under *Push* choose
+     **Allowlist Restricted Push** and add `admin` under **Allowlisted users for pushing** (creating a release line is a
+     push; only the main dev may do it). 📸 both rules
      ⚠ The status name only exists after the first run of the checks workflow (5.6); typing it into the rule is fine.
-  Also *Settings → Repository → Pull Requests*: tick **delete branch after merge** (default). 
+  Also *Settings → Repository → Pull Requests*: tick **Delete pull request branch after merge by default**. 
 - [ ] **5.6 First pull request through the gate.** Prove the rules work:
   ```bash
   git switch -c chore/readme && echo "# ait_banners" > README.md
