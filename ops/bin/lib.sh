@@ -70,3 +70,17 @@ register_package() { local name=$1; load_secrets
   curl -sS -X POST "$PACKETON/api/create-package?username=admin&apiToken=$PACKETON_TOKEN" -H 'Content-Type: application/json' \
     -d "{\"repository\":\"http://$GITEA_HOST:3000/$MODULE_ORG/$name.git\",\"repoType\":\"vcs\"}" | jq -r '"   registered in Packeton: \(.name // .message)"'
 }
+
+# seed_module NAME -> if the module repo is still empty and seed/modules/NAME exists, push it as the first
+# commit and tag v1.0.0 (as admin: only main devs may tag). Lets a fresh lab start from known module code.
+seed_module() { local name=$1 seed=$LAB_ROOT/seed/modules/$1
+  [ -d "$seed" ] || return 0
+  [ "$(api GET "/repos/$MODULE_ORG/$name/branches" | jq 'length')" = 0 ] || return 0
+  local tmp; tmp=$(mktemp -d)
+  cp -a "$seed/." "$tmp/"
+  ( cd "$tmp" && git init -q -b main && git config user.name "Main Dev" && git config user.email "admin@example.test" \
+    && git add -A && git commit -qm "Initial module (seeded by ./lab sync)" && git tag -a v1.0.0 -m "First release" \
+    && git push -q "http://$ADMIN:$ADMIN_PW@$GITEA_HOST:3000/$MODULE_ORG/$name.git" main v1.0.0 ) \
+    && echo "   seeded $name from seed/modules/$name, tagged v1.0.0"
+  rm -rf "$tmp"
+}

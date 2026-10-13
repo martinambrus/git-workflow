@@ -23,6 +23,7 @@ grep -vE '^\s*(#|$)' "$MANIFEST" | while read -r kind name src _; do
   ensure_repo "$org" "$name" "$src"
   if [ "$kind" = module ]; then
     ensure_tag_protection "$org" "$name"
+    seed_module "$name"
     ensure_pkg_hook "$name"
     register_package "$name"
   fi

@@ -1,0 +1,19 @@
+{#
+/**
+ * @file
+ * Sponsorship banner.
+ *
+ * Available variables:
+ * - sponsor: Sponsor name.
+ * - tagline: Short text.
+ * - url: Link target.
+ * - image_url: Optional logo URL.
+ */
+#}
+<aside class="ait-banner" data-ait-banner="sponsorship">
+  <a class="ait-banner__link" href="{{ url }}" rel="sponsored noopener">
+    {% if image_url %}<img class="ait-banner__logo" src="{{ image_url }}" alt="{{ sponsor }}">{% endif %}
+    <span class="ait-banner__sponsor">{{ sponsor }}</span>
+    {% if tagline %}<span class="ait-banner__tagline">{{ tagline }}</span>{% endif %}
+  </a>
+</aside>

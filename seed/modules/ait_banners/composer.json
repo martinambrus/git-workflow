@@ -1,0 +1,7 @@
+{
+  "name": "activit/ait_banners",
+  "description": "Sponsorship banners: a configurable banner block.",
+  "type": "drupal-custom-module",
+  "license": "GPL-2.0-or-later",
+  "require": { "drupal/core": "^10.3 || ^11" }
+}

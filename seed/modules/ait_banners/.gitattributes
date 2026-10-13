@@ -1,0 +1,4 @@
+# Keep tests and CI files out of the package archive (plan 4.2)
+/tests export-ignore
+/.gitea export-ignore
+/.gitattributes export-ignore

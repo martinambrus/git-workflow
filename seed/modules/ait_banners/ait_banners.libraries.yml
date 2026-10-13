@@ -1,0 +1,4 @@
+banner:
+  css:
+    theme:
+      css/banner.css: {}

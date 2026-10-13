@@ -1,6 +1,6 @@
 # kind     name        [source-git-url to import on first sync]
 # Edit, then run: ./lab sync
-module     ait_demo
+module     ait_banners
 # module   some_upstream   https://github.com/example/some_upstream.git
 project    shop-a
 project    shop-b

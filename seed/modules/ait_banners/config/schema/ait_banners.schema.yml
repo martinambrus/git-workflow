@@ -1,0 +1,16 @@
+block.settings.ait_banners_sponsorship:
+  type: block_settings
+  label: 'Sponsorship banner block'
+  mapping:
+    sponsor:
+      type: string
+      label: 'Sponsor'
+    tagline:
+      type: label
+      label: 'Tagline'
+    url:
+      type: string
+      label: 'Link URL'
+    image_url:
+      type: string
+      label: 'Logo URL'

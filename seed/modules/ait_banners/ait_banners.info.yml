@@ -1,0 +1,5 @@
+name: AIT Banners
+type: module
+description: 'Sponsorship banners: a configurable banner block.'
+package: Activit
+core_version_requirement: ^10.3 || ^11

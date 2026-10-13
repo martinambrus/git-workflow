@@ -6,6 +6,8 @@ A local, rebuildable Gitea + Packeton + Actions runner to test
 ## Quick start
 
 Needs Docker with Compose, `git`, `curl`, `jq`. PHP/Composer are **not** needed on the host.
+For the Drupal sites also install [DDEV](https://ddev.com) and run once:
+`ddev config global --router-http-port=8080 --router-https-port=8443` (Packeton owns port 80) and `mkcert -install`.
 
 ```bash
 git clone <this repo> && cd <this repo>
@@ -60,13 +62,50 @@ Projects need `"secure-http": false` in `config` (Packeton is plain HTTP here), 
 
 Verified by `./lab smoke`: protected tags refuse the bot, tag push reaches Packeton within seconds, an Actions job
 with only `run:` steps runs in our image and can clone with `BOT_TOKEN`, `composer require` installs a dist archive.
-Not yet verified: export-ignore in Packeton archives, `dev-up/...` branch installs, customer limits (plan 14.4).
+
+Verified with the real Drupal projects (plan 14.4): `drupal-custom-module` lands in `web/modules/custom/<name>`
+with the stock `drupal/recommended-project` installer paths; Packeton's archive honours `export-ignore` (no
+`tests/`, no `.gitattributes` in the install); no nested `.git`; `composer update activit/ait_banners` moves a
+project from `v1.0.0` to `v1.0.1`; DDEV web containers reach Packeton once joined to the `wf-net` network.
+Not yet verified: `dev-up/...` branch installs, customer limits, the Upstream/Release/Update-PR workflows.
+
+5. **`drupal/recommended-project` ships no `.gitignore`**, so Drupal's runtime `web/sites/default/files/` would be
+   committed (twig cache, `.htaccess` files). The projects add `web/sites/default/files/` and nothing else
+   (plan section 3 should say so). `settings.php` is committed too, as plan rule 5 implies.
+6. **Tag order:** registering a package in Packeton *after* its first tag was pushed worked (registration indexes
+   existing tags), but the webhook only fires for registered packages. Register first, tag second (plan 4.3 order).
+7. A quoted-colon bug in the first module release (`description: A: b` in `info.yml`) broke site install; fixed as
+   `v1.0.1`, as the plan demands (tags are never moved).
+
+## Drupal projects (DDEV)
+
+`projects/shop-a` and `projects/shop-b` are Drupal 11 sites, each committed with `vendor/` and `web/`, each
+requiring `activit/ait_banners` from Packeton.
+
+```bash
+./lab sync                                   # create + clone the repos
+ops/bin/new-drupal-project.sh shop-a "Acme Corp" "Proudly supporting Shop A" '^1.0'
+ops/bin/new-drupal-project.sh shop-b "Globex Ltd" "Proudly supporting Shop B" '^1.0'
+```
+
+| Site | URL | Login |
+| --- | --- | --- |
+| shop-a | https://shop-a.ddev.site:8443 | `admin`/`admin` |
+| shop-b | https://shop-b.ddev.site:8443 | `admin`/`admin` |
+
+The script is idempotent only in the sense that it refuses to run on an already scaffolded project. A fresh clone
+of a project from Gitea needs `ddev start && ddev drush si` or a database; only code and config are committed.
+
+`seed/modules/ait_banners/` holds the module's source. On a fresh lab `./lab sync` pushes it to the empty
+`activit/ait_banners` repository and tags `v1.0.0` (this is the already-fixed code, i.e. what was `v1.0.1` in the
+first run). After that, the module lives in Gitea and `modules/ait_banners` is its working clone.
 
 ## Layout
 
 ```
 lab                    CLI entry point          lab.manifest   repos to create/clone
 ops/docker-compose.yml stack (pinned images)    ops/runner/    runner image + act_runner config
-ops/bin/               bootstrap, sync, smoke   ops/.state/    generated tokens (gitignored)
+ops/bin/               bootstrap, sync, smoke,  ops/.state/    generated tokens (gitignored)
+                       new-drupal-project       seed/modules/   module source for a fresh lab
 modules/  projects/    working clones (gitignored; each is a repo in Gitea)
 ```

@@ -1,0 +1,23 @@
+<?php
+
+/**
+ * @file
+ * AIT Banners: sponsorship banner block.
+ */
+
+/**
+ * Implements hook_theme().
+ */
+function ait_banners_theme(): array {
+  return [
+    'ait_banners_banner' => [
+      'variables' => [
+        'sponsor' => '',
+        'tagline' => '',
+        'url' => '',
+        'image_url' => '',
+      ],
+      'template' => 'ait-banners-banner',
+    ],
+  ];
+}
