@@ -1,0 +1,18 @@
+log:
+  level: info
+runner:
+  file: /data/.runner
+  capacity: 2
+  timeout: 1h
+  # Both labels run jobs in our own image; nothing is pulled from Docker Hub at job time.
+  labels:
+    - "ubuntu-latest:docker://activit-runner:local"
+    - "activit-runner:docker://activit-runner:local"
+cache:
+  enabled: false
+container:
+  # job containers join the compose network so gitea.test / packeton.test resolve
+  network: wf-net
+  privileged: false
+  force_pull: false
+  valid_volumes: []

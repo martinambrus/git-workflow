@@ -1,0 +1,6 @@
+# lab state and credentials generated at runtime
+ops/.state/
+ops/.env
+# working clones created by ./lab sync (each is its own repo in Gitea)
+/modules/
+/projects/

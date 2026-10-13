@@ -1,0 +1,79 @@
+# Throwaway Gitea + Packeton + Actions runner for testing shared-drupal-modules-workflow.md
+# Same URLs work on the host and inside containers (see README: /etc/hosts entry).
+name: wf
+services:
+  gitea:
+    image: gitea/gitea@sha256:f505a0d3a41323b786e05942fc7a4075e07ae7c169fd9485649aa55ee543a21a  # 28.1.0
+    restart: unless-stopped
+    environment:
+      USER_UID: "1000"
+      USER_GID: "1000"
+      GITEA__database__DB_TYPE: sqlite3
+      GITEA__server__DOMAIN: gitea.test
+      GITEA__server__ROOT_URL: http://gitea.test:3000/
+      GITEA__server__SSH_DOMAIN: gitea.test
+      GITEA__server__SSH_PORT: "2222"
+      GITEA__server__SSH_LISTEN_PORT: "22"
+      GITEA__security__INSTALL_LOCK: "true"
+      GITEA__service__DISABLE_REGISTRATION: "true"
+      GITEA__actions__ENABLED: "true"
+      GITEA__packages__ENABLED: "true"
+      # Gitea 28: let webhooks / migrations reach Packeton and other containers on the private network
+      GITEA__security__EGRESS_MODE: lax
+      GITEA__security__ALLOWED_HOST_LIST: "private,loopback"
+      GITEA__repository__DEFAULT_BRANCH: main
+    volumes:
+      - gitea-data:/data
+    ports:
+      - "127.0.0.1:3000:3000"
+      - "127.0.0.1:2222:22"
+    networks:
+      default:
+        aliases: [gitea.test]
+
+  packeton:
+    image: packeton/packeton@sha256:373462ffb14a9aac377f8e2354904ae31ee922af0bcac63847f81fc16396e811  # latest on 2026-10-13
+    restart: unless-stopped
+    environment:
+      ADMIN_USER: admin
+      ADMIN_PASSWORD: admin12345
+      ADMIN_EMAIL: admin@example.test
+      PUBLIC_ACCESS: "false"
+      APP_ENV: prod
+    volumes:
+      - packeton-data:/data
+    ports:
+      - "127.0.0.1:80:80"
+    networks:
+      default:
+        aliases: [packeton.test]
+
+  runner:
+    image: gitea/act_runner@sha256:b5c35d6bdbb9bb25e531230bfc7cc663cb751406cbec90a2a891b85fea54de86  # 0.6.1
+    restart: unless-stopped
+    depends_on: [gitea]
+    environment:
+      CONFIG_FILE: /config.yaml
+      GITEA_INSTANCE_URL: http://gitea.test:3000
+      GITEA_RUNNER_REGISTRATION_TOKEN: ${RUNNER_TOKEN:-}
+      GITEA_RUNNER_NAME: local-runner
+    volumes:
+      - ./runner/config.yaml:/config.yaml:ro
+      - runner-data:/data
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks: [default]
+
+  # Only built, never run as a service: the image every Actions job (and bin/composer) uses.
+  runner-image:
+    image: activit-runner:local
+    build: ./runner
+    profiles: [build]
+
+volumes:
+  gitea-data:
+  packeton-data:
+  runner-data:
+
+networks:
+  default:
+    name: wf-net
