@@ -53,6 +53,15 @@ if "'../config/sync'" not in s: open(p,'w').write(s[:i]+add+s[i:])
 PY
 ddev drush en ait_banners -y
 ddev drush php:eval "\$b=\Drupal\block\Entity\Block::create(['id'=>'olivero_sponsorship_banner','theme'=>'olivero','region'=>'content_above','plugin'=>'ait_banners_sponsorship','weight'=>-10,'status'=>TRUE,'settings'=>['id'=>'ait_banners_sponsorship','label'=>'Sponsorship banner','label_display'=>'0','provider'=>'ait_banners','sponsor'=>'$sponsor','tagline'=>'$tagline','url'=>'https://example.com','image_url'=>''],'visibility'=>[]]);\$b->save();"
+
+# project-only extension modules and setup (plan rule 8: client-only behaviour lives in the project)
+extras="$LAB_ROOT/seed/project-extras/$name"
+if [ -d "$extras" ]; then
+  say "project extras: extension modules"
+  rsync -a --exclude post-install.sh "$extras/" ./
+  for m in $(cd "$extras/web/modules/custom" 2>/dev/null && ls -d */ | tr -d /); do ddev drush en "$m" -y; done
+  [ -x "$extras/post-install.sh" ] && "$extras/post-install.sh"
+fi
 ddev drush cex -y
 
 say "commit (vendor/ and web/ included) + push"

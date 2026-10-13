@@ -1,0 +1,59 @@
+<?php
+
+/**
+ * @file
+ * Shop B only: adds a sponsor tier to the shared AIT sponsorship banner block.
+ *
+ * This is an extension module (plan rule 8): it uses only core hooks and the
+ * block plugin of activit/ait_banners, and never edits the shared module.
+ */
+
+use Drupal\Core\Block\BlockPluginInterface;
+use Drupal\Core\Entity\EntityInterface;
+use Drupal\Core\Form\FormStateInterface;
+use Drupal\shop_b_banner_tiers\BannerTier;
+
+/**
+ * Implements hook_form_FORM_ID_alter() for the block configuration form.
+ */
+function shop_b_banner_tiers_form_block_form_alter(array &$form, FormStateInterface $form_state): void {
+  $block = $form_state->getFormObject()->getEntity();
+  if ($block->getPluginId() !== 'ait_banners_sponsorship') {
+    return;
+  }
+  $form['shop_b_tier'] = [
+    '#type' => 'select',
+    '#title' => t('Sponsor tier'),
+    '#description' => t('Shop B only: shown as a coloured label above the banner.'),
+    '#options' => ['' => t('- None -')] + BannerTier::options(),
+    '#default_value' => $block->getThirdPartySetting('shop_b_banner_tiers', 'tier', ''),
+    '#weight' => 5,
+  ];
+  $form['#entity_builders'][] = 'shop_b_banner_tiers_block_form_builder';
+}
+
+/**
+ * Entity builder: store the tier as a third-party setting of the block.
+ */
+function shop_b_banner_tiers_block_form_builder(string $entity_type, EntityInterface $block, array &$form, FormStateInterface $form_state): void {
+  $tier = (string) $form_state->getValue('shop_b_tier');
+  if ($tier === '') {
+    $block->unsetThirdPartySetting('shop_b_banner_tiers', 'tier');
+  }
+  else {
+    $block->setThirdPartySetting('shop_b_banner_tiers', 'tier', $tier);
+  }
+}
+
+/**
+ * Implements hook_block_view_BASE_BLOCK_ID_alter().
+ */
+function shop_b_banner_tiers_block_view_ait_banners_sponsorship_alter(array &$build, BlockPluginInterface $block): void {
+  // Core's own #pre_render unsets #block, so read the tier here and carry it on the build.
+  $entity = $build['#block'] ?? NULL;
+  $tier = $entity ? (string) $entity->getThirdPartySetting('shop_b_banner_tiers', 'tier', '') : '';
+  if ($tier !== '') {
+    $build['#shop_b_tier'] = $tier;
+    $build['#pre_render'][] = [BannerTier::class, 'preRender'];
+  }
+}

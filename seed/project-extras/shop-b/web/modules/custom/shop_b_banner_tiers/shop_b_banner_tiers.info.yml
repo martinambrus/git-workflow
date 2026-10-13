@@ -1,0 +1,8 @@
+name: 'Shop B banner tiers'
+type: module
+description: 'Shop B only: sponsor tier (silver, gold, platinum) for the AIT sponsorship banner block.'
+package: 'Shop B'
+core_version_requirement: ^10.3 || ^11
+dependencies:
+  - ait_banners:ait_banners
+  - drupal:block

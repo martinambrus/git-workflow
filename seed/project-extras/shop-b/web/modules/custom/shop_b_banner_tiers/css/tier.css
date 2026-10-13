@@ -1,0 +1,5 @@
+.shop-b-tier { border-left: 4px solid var(--shop-b-tier-color, #8b949e); padding-left: 0.5rem; }
+.shop-b-tier__label { display: inline-block; margin-bottom: 0.25rem; font-size: 0.75rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--shop-b-tier-color, #57606a); }
+.shop-b-tier--silver   { --shop-b-tier-color: #8c959f; }
+.shop-b-tier--gold     { --shop-b-tier-color: #bf8700; }
+.shop-b-tier--platinum { --shop-b-tier-color: #6e40c9; }

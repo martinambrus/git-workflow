@@ -52,19 +52,39 @@ for entry in "${mods[@]}"; do
 
   work=$(mktemp -d); mod="$work/mod"; base="$work/base"
   remote="${GITEA_URL}/${MODULE_ORG}/${short}.git"
+
+  # Client-only patches (cweagans/composer-patches, plan section 11) must never travel upstream: compare the
+  # project folder with those patches reversed. Patches are re-applied by Composer on every install anyway.
+  cand="$path"
+  mapfile -t patch_files < <(jq -r --arg n "$name" '
+      (.extra.patches[$n] // empty)
+      | (if type == "object" then to_entries | map(.value) else . end)
+      | .[] | (if type == "object" then .url else . end)' composer.json 2>/dev/null)
+  if [ "${#patch_files[@]}" -gt 0 ]; then
+    cand="$work/unpatched"; cp -a "$path" "$cand"
+    for (( i=${#patch_files[@]}-1; i>=0; i-- )); do   # reverse order
+      pf=${patch_files[$i]}
+      [[ $pf == http* ]] && { warn "$name: remote patch '$pf' cannot be reversed here, skipping module"; rc=1; continue 2; }
+      [ -f "$pf" ] || { warn "$name: patch file '$pf' not found, skipping module"; rc=1; continue 2; }
+      if ! patch -R -p1 -s --no-backup-if-mismatch -d "$cand" < "$proj/$pf" >/dev/null; then
+        warn "$name: patch '$pf' could not be reversed (edited on top of it?), skipping module"; rc=1; echo "::endgroup::"; continue 2
+      fi
+    done
+    log "$name: ${#patch_files[@]} client patch(es) reversed before comparing"
+  fi
   git clone -q "$remote" "$mod" || die "cannot clone $remote"
   git -C "$mod" rev-parse -q --verify "refs/tags/$version" >/dev/null || die "tag $version not found in $remote"
   mkdir "$base" && git -C "$mod" archive "$version" | tar -x -C "$base"     # what the package of the locked tag contains
 
-  if diff -rq "$base" "$path" >/dev/null; then
+  if diff -rq "$base" "$cand" >/dev/null; then
     log "no drift in $path against $version: nothing to send"; echo "::endgroup::"; continue
   fi
-  log "drift in $path against $version:"; diff -rq "$base" "$path" | sed 's/^/    /' || true
+  log "drift in $path against $version:"; diff -rq "$base" "$cand" | sed 's/^/    /' || true
 
   # patch: locked release -> project folder (binary-safe)
   git -C "$base" init -q && git -C "$base" add -A && bot_git -C "$base" commit -qm base
   find "$base" -mindepth 1 -maxdepth 1 -not -name .git -exec rm -rf {} +
-  cp -a "$path/." "$base/" && git -C "$base" add -A
+  cp -a "$cand/." "$base/" && git -C "$base" add -A
   git -C "$base" diff --cached --binary > "$work/changes.patch"
 
   # target line: <major>.x if that branch exists, else main
@@ -79,11 +99,11 @@ for entry in "${mods[@]}"; do
 
   # integrity: the module branch must reproduce the project folder exactly (checked BEFORE pushing)
   chk="$work/chk"; mkdir "$chk"; git -C "$mod" archive HEAD | tar -x -C "$chk"
-  if ! diff -rq "$chk" "$path" >/dev/null; then
-    warn "integrity check failed for $name: module branch differs from project folder"; diff -rq "$chk" "$path" | sed 's/^/    /' || true
+  if ! diff -rq "$chk" "$cand" >/dev/null; then
+    warn "integrity check failed for $name: module branch differs from project folder"; diff -rq "$chk" "$cand" | sed 's/^/    /' || true
     rc=1; echo "::endgroup::"; continue
   fi
-  log "integrity OK: module branch == project folder"
+  log "integrity OK: module branch == project folder (client patches reversed)"
 
   git -C "$mod" push -q --force origin "$bot_branch"
   log "pushed ${MODULE_ORG}/${short}:${bot_branch} (cut from $version, target $target)"

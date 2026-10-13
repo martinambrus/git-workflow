@@ -1,0 +1,7 @@
+block.block.*.third_party.shop_b_banner_tiers:
+  type: mapping
+  label: 'Shop B banner tier settings'
+  mapping:
+    tier:
+      type: string
+      label: 'Sponsor tier'

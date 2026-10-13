@@ -1,0 +1,4 @@
+tier:
+  css:
+    theme:
+      css/tier.css: {}

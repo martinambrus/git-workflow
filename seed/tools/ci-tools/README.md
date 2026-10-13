@@ -37,3 +37,10 @@ cache silently).
 Drift is a warning on plain branch pushes (own modules only) and a failure on PRs into `main` and on `main`. Composer's
 generated files (autoloader suffix, `include_paths` order, hash constants) and CR-at-EOL differences are not compared
 byte for byte; instead `vendor/composer/installed.json` is checked against `composer.lock`.
+
+## Client patches (v1.3.0)
+
+`bin/upstream.sh` reverses the project's `extra.patches` for a module (cweagans/composer-patches, plan section 11)
+before comparing it with the locked release, so a client-only patch is never proposed to the shared module; only
+real in-place edits are sent. A patch that cannot be reversed (edited on top of it, remote URL) makes the job fail
+loudly instead of guessing.

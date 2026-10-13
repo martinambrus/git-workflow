@@ -24,6 +24,21 @@ git clone <this repo> && cd <this repo>
 The same URLs work on the host and inside containers/jobs, which is why the hosts entry is needed.
 Everything is throwaway: the credentials are fixed, public and local-only.
 
+## The scenario this lab runs
+
+Two Drupal 11 sites share one module, `activit/ait_banners` (a sponsorship banner block), and the sites differ:
+
+| | shop-a | shop-b |
+| --- | --- | --- |
+| Shared module | `^1.0`, follows releases (update PRs) | frozen at exactly `1.1.1` |
+| Promo badge (module 1.1+) | not configured | "-20% this week" |
+| Client-only behaviour | none | `shop_b_banner_tiers`: a sponsor-tier label, an **extension module inside the project** (plan rule 8) |
+
+Developers edit the shared module in place inside a project and push; the Upstream job turns that into a merge request
+in the module repo; the main dev merges and tags; the Release job waits for Packeton and opens update PRs in every
+opted-in project; the Checks job gates `main`. Everything from section 14.4 of the plan except real internet exposure
+has been exercised on this machine (see the findings below).
+
 ## What `./lab up` creates
 
 - **Gitea** (pinned image) with Actions on; orgs `activit` (modules) and `sites` (projects); team `devs`
@@ -211,6 +226,33 @@ moving the date forward restored everything (the freeze of plan section 10).
     `minimum-stability` allows it. The Release job opens no update PRs for them.
 20. Not verified (cannot be locally): real internet exposure, a publicly trusted certificate, rate limits.
 
+## Client-only behaviour: extension module and patches (plan rule 8, section 11)
+
+**Extension module (first choice).** `projects/shop-b/web/modules/custom/shop_b_banner_tiers` adds a "Sponsor tier"
+select to the shared block's configuration form and wraps the rendered banner in a tier label. It uses only core hooks
+(`hook_form_block_form_alter`, `hook_block_view_BASE_alter`) and never touches `activit/ait_banners`. Verified: it is
+invisible to the Upstream job (no MR, no bot branch), the Checks gate passes (its folder is not Composer-managed, so a
+clean reinstall leaves it alone), `shop-a` is unaffected, and it is rebuilt on a fresh lab from
+`seed/project-extras/shop-b/` by `new-drupal-project.sh`.
+
+21. **Drupal gotcha found while writing it:** core's own block `#pre_render` does `unset($build['#block'])`, so a
+    `#pre_render` appended in `hook_block_view_*_alter` cannot read the block entity. Read what you need in the alter
+    hook and carry it on the build array (`#shop_b_tier`).
+
+**Patch file (second choice).** Tested with `cweagans/composer-patches` v2 on a throwaway branch of `shop-a`:
+
+22. **A patched shared module looks like an in-place edit to the Upstream job.** The Checks gate passes (a clean
+    reinstall re-applies the patch from `patches.lock.json`, so the patched folder *is* reproducible), but Upstream
+    compared the folder with the raw archive of the tag and opened a green merge request proposing the Shop A-only
+    patch to the shared module, where a reviewer could merge it for everybody. Fixed in `ci-tools` **v1.3.0**:
+    Upstream reverses the module's `extra.patches` before comparing, so only real edits travel upstream (verified: a
+    patched module alone sends nothing; patch + a real edit sends only the edit). A patch that cannot be reversed
+    fails the job loudly.
+23. Smaller facts from the same test: `allow-plugins.cweagans/composer-patches` must be enabled per project (put it
+    in the project template); editing `extra.patches` changes the lock's content hash, so `composer update --lock`
+    is required (the Checks job caught my forgetting it: "composer.lock is not up to date with composer.json");
+    `composer reinstall`/`update` replaces an edited module folder without prompting (dist install).
+
 ## Browser checks (optional)
 
 `.claude/mcp_settings.json` configures the Chrome DevTools MCP server (`npx chrome-devtools-mcp`) so Claude Code can
@@ -225,7 +267,8 @@ lab                    CLI entry point          lab.manifest   repos to create/c
 ops/docker-compose.yml stack (pinned images)    ops/runner/    runner image + act_runner config
 ops/bin/               bootstrap, sync, smoke,  ops/.state/    generated tokens (gitignored)
                        new-drupal-project,      seed/            module, ci-tools and project-template sources
-                       site-up                  (pushed to empty repos by ./lab sync;
-                                                 module-template holds the module workflow stubs)
+                       site-up, external, prune (pushed to empty repos by ./lab sync;
+                                                 module-template: module workflow stubs;
+                                                 project-extras: per-project extension modules)
 modules/  projects/    working clones (gitignored; each is a repo in Gitea)
 ```
