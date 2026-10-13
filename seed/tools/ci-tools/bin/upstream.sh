@@ -93,7 +93,7 @@ for entry in "${mods[@]}"; do
 
   # one cumulative commit on a branch cut from the locked tag
   msg=$(git log --format='- %s (%an)' "$base_ref"..HEAD -- "$path" || true)
-  git -C "$mod" switch -q -c "$bot_branch"
+  git -C "$mod" switch -q -c "$bot_branch" "refs/tags/$version"   # cut from the LOCKED release, never from a moved main/1.x
   git -C "$mod" apply --index "$work/changes.patch"
   bot_git -C "$mod" commit -q -m "Changes from project ${project} (${BRANCH})" -m "$msg"
 

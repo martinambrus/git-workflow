@@ -44,3 +44,9 @@ byte for byte; instead `vendor/composer/installed.json` is checked against `comp
 before comparing it with the locked release, so a client-only patch is never proposed to the shared module; only
 real in-place edits are sent. A patch that cannot be reversed (edited on top of it, remote URL) makes the job fail
 loudly instead of guessing.
+
+## v1.3.1
+
+The Upstream bot branch is now cut from the **locked tag**, as documented. Before, it was cut from the module
+repository's default branch, which only worked while `main` still equalled the tag (found by the release-line
+scenarios: a project on 1.x could not send a fix once `main` had moved to 2.0.0).
