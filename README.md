@@ -128,7 +128,9 @@ Packeton's archive and `git archive` of the tag are identical for this module (n
 ## Browser checks (optional)
 
 `.claude/mcp_settings.json` configures the Chrome DevTools MCP server (`npx chrome-devtools-mcp`) so Claude Code can
-open the DDEV sites, click through the Drupal admin and take screenshots. Needs Node.js and a stable Chrome.
+open the DDEV sites, click through the Drupal admin and take screenshots. Needs Node.js and **Google Chrome stable
+installed at `/opt/google/chrome/chrome`** (the `.deb` from google.com/chrome; Chromium or Firefox will not do).
+Gitea shows private repos as 404 until you log in, so sign in as `admin` first.
 
 ## Layout
 
