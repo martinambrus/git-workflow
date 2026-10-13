@@ -52,6 +52,21 @@ release_result() { # repo tag -> conclusion of the Release run for that tag's co
         '([.workflow_runs[]|select(.head_sha==$s)|select(.path|test("release"))][0]) as $r | if $r and $r.status=="completed" then $r.conclusion else empty end')
     [ -n "$c" ] && { echo "$c"; return; }; n=$((n+1)); sleep 5; done; echo timeout; }
 
+find_pr() { # repo head-prefix base -> number of the newest open PR with that head prefix into that base
+  api GET "/repos/$1/pulls?state=open&limit=50" | jq -r --arg p "$2" --arg b "$3" \
+    '[.[]|select(.head.ref|startswith($p))|select(.base.ref==$b)]|sort_by(.number)|last|.number // empty'; }
+wait_pr() { local n=0 r; while [ "$n" -lt "$4" ]; do r=$(find_pr "$1" "$2" "$3"); [ -n "$r" ] && { echo "$r"; return 0; }; n=$((n+5)); sleep 5; done; return 1; }
+find_issue() { # repo title-fragment -> number of an open issue
+  api GET "/repos/$1/issues?state=open&type=issues&limit=50" | jq -r --arg t "$2" '[.[]|select(.title|contains($t))]|first|.number // empty'; }
+direct_push_rejected() { # repo branch -> success when a direct push as the main dev is refused (branch protection)
+  local d; d=$(mktemp -d -p "$WORK")
+  git clone -q --depth 1 --branch "$2" "$(admin_url "$1")" "$d/c" 2>/dev/null || return 1
+  ( cd "$d/c" && git config user.name x && git config user.email x@x.test && echo "# direct" >> DIRECT.md \
+      && git add -A && git commit -qm direct && ! git push -q origin "$2" ) >/dev/null 2>&1; }
+merge_forward_pr() { # repo number -> wait for Checks on its head, then merge
+  local h; h=$(api GET "/repos/$1/pulls/$2" | jq -r .head.ref)
+  wait_for 600 "Checks on $1#$2" is_success "$1" "$h" && merge_pr "$1" "$2"; }
+
 seed_module_repo() { # name srcdir
   ensure_repo "$MODULE_ORG" "$1" >/dev/null
   ensure_tag_protection "$MODULE_ORG" "$1"
@@ -59,6 +74,7 @@ seed_module_repo() { # name srcdir
   ensure_pkg_hook "$1"
   register_package "$1" >/dev/null
   ensure_main_protection "$MODULE_ORG" "$1" >/dev/null
+  ensure_release_line_protection "$MODULE_ORG" "$1" >/dev/null
   api PATCH "/repos/$MODULE_ORG/$1" '{"default_delete_branch_after_merge":true}' >/dev/null
 }
 
@@ -148,15 +164,20 @@ done
 step "L3. 2.0.0 (breaking) released on main, 1.x line created from v1.0.1"
 api POST "/repos/$PBASE/branches" '{"new_branch_name":"1.x","old_ref_name":"v1.0.1"}' >/dev/null
 wait_for_branch "$MODULE_ORG" "$BASE" 1.x 60 >/dev/null 2>&1
-api POST "/repos/$PBASE/branch_protections" '{"rule_name":"1.x","enable_push":false,"enable_status_check":true,"status_check_contexts":["checks / checks (pull_request)"],"required_approvals":0}' >/dev/null
-[ "$(http_code GET "/repos/$PBASE/branches/1.x")" = 200 ] && ok "maintenance branch 1.x created from v1.0.1 and protected" || die "1.x missing"
-edit_major() { jq '.require["drupal/core"]="^11"' composer.json > c.tmp && mv c.tmp composer.json; echo "/* $ts: 2.0.0 */" >> css/banner.css; }
+[ "$(http_code GET "/repos/$PBASE/branches/1.x")" = 200 ] && ok "maintenance branch 1.x created from v1.0.1" || die "1.x missing"
+direct_push_rejected "$PBASE" 1.x && ok "1.x is protected automatically (direct push by the main dev refused; no rule was created for it by hand)" \
+  || bad "1.x accepted a direct push: release lines are not protected"
+edit_major() { jq '.require["drupal/core"]="^11"' composer.json > c.tmp && mv c.tmp composer.json; echo "// $ts: 2.0.0" >> ait_banners.module; }
 module_change "$PBASE" main "rel/2.0.0" "Breaking: require Drupal 11" edit_major && tag_release "$PBASE" main v2.0.0 \
   && wait_for 180 "v2.0.0 indexed" pk_has "$PBASE" v2.0.0 && ok "v2.0.0 released on main" || die "cannot release v2.0.0"
 c=$(release_result "$PBASE" v2.0.0); [ "$c" = success ] && ok "Release job for v2.0.0 finished: $c" || bad "Release job for v2.0.0: $c"
 for p in "$P_OLD" "$P_EXP" "$P_NEW" "$P_PIN"; do
   pr_exists "$SITE_ORG/$p" "update/$BASE-2.0.0" && bad "$p got an update PR for 2.0.0 although it is on ^1.0" || ok "$p: no update PR for 2.0.0"
 done
+# the 2.x line, so that the forward-port chain 1.x -> 2.x -> main exists
+api POST "/repos/$PBASE/branches" '{"new_branch_name":"2.x","old_ref_name":"v2.0.0"}' >/dev/null
+wait_for_branch "$MODULE_ORG" "$BASE" 2.x 60 >/dev/null 2>&1
+direct_push_rejected "$PBASE" 2.x && ok "2.x is protected automatically as well" || bad "2.x accepted a direct push"
 
 step "L4. the extension (requires base ^1.0) blocks the major upgrade"
 d=$WORK/blk; git clone -q "$(dev_url "$SITE_ORG/$P_OLD")" "$d" 2>/dev/null
@@ -182,6 +203,12 @@ mr=$(open_pr_number "$PBASE" "$bot_branch")
   || bad "MR #$mr targets $(api GET "/repos/$PBASE/pulls/$mr" | jq -r .base.ref), expected 1.x"
 wait_for 600 "module Checks on the MR" is_success "$PBASE" "$bot_branch" && ok "module Checks ran and passed on a PR into 1.x" || bad "Checks on the 1.x MR: $(pr_status "$PBASE" "$bot_branch")"
 merge_pr "$PBASE" "$mr" && ok "MR merged into 1.x" || die "cannot merge the 1.x MR"
+fp=$(wait_pr "$PBASE" "fwd/1.x/" 2.x 300) && ok "Forward-port job opened PR #$fp: 1.x -> 2.x (the next higher line, not main)" || { bad "no forward-port PR from 1.x"; fp=; }
+if [ -n "$fp" ]; then
+  merge_forward_pr "$PBASE" "$fp" && ok "forward-port PR #$fp passed Checks and merged into 2.x" || bad "forward-port PR #$fp not merged"
+  fp2=$(wait_pr "$PBASE" "fwd/2.x/" main 300) && ok "merging into 2.x triggered the next hop: PR #$fp2 2.x -> main" || { bad "no second hop 2.x -> main"; fp2=; }
+  [ -n "$fp2" ] && { merge_forward_pr "$PBASE" "$fp2" && ok "second hop merged: the fix is on 1.x, 2.x and main" || bad "second hop PR #$fp2 not merged"; }
+fi
 tag_release "$PBASE" 1.x v1.0.2 && wait_for 180 "v1.0.2 indexed" pk_has "$PBASE" v1.0.2 && ok "v1.0.2 tagged on the 1.x branch and indexed" || die "cannot release v1.0.2"
 c=$(release_result "$PBASE" v1.0.2); [ "$c" = success ] && ok "Release job for v1.0.2 finished: $c" || bad "Release job for v1.0.2: $c"
 wait_for 300 "update PR in $P_OLD" bash -c ". '$LAB_ROOT/ops/bin/lib.sh'; [ -n \"\$(api GET '/repos/$SITE_ORG/$P_OLD/pulls?state=open&limit=50' | jq -r '.[]|select(.head.ref==\"update/$BASE-1.0.2\")|.number')\" ]" \
@@ -257,10 +284,13 @@ v=$(jq -r --arg p "$PBASE" '.packages[]?|select(.name==$p)|.version' "$cdir/comp
 
 # 9b. internal client: support renewed (opts in again), a 1.x patch release reaches it
 api PUT "/repos/$SITE_ORG/$P_EXP/topics/activit-project" >/dev/null
-edit_103() { echo "/* $ts: 1.0.3 */" >> css/banner.css; }
+edit_103() { echo "// $ts: 1.0.3" >> ait_banners.module; }   # same file/EOF as 2.0.0 prep: must conflict on the way to 2.x
 module_change "$PBASE" 1.x "rel/1.0.3" "Release 1.0.3 prep (1.x line)" edit_103 && tag_release "$PBASE" 1.x v1.0.3 \
   && wait_for 180 "v1.0.3 indexed" pk_has "$PBASE" v1.0.3 && ok "v1.0.3 released on the 1.x branch" || die "cannot release v1.0.3"
 c=$(release_result "$PBASE" v1.0.3); [ "$c" = success ] && ok "Release job for v1.0.3 finished: $c" || bad "Release job for v1.0.3: $c"
+wait_for 300 "conflict issue" bash -c ". '$LAB_ROOT/ops/bin/lib.sh'; [ -n \"\$(api GET '/repos/$PBASE/issues?state=open&type=issues&limit=50' | jq -r '.[]|select(.title|contains(\"Forward-port needed (1.x -> 2.x)\"))|.number')\" ]" \
+  && ok "a conflicting forward-port opened an issue instead of guessing (1.x -> 2.x)" || bad "no conflict issue for the 1.0.3 prep"
+[ -z "$(find_pr "$PBASE" "fwd/1.x/" 2.x)" ] && ok "and no pull request was opened for the conflicting change" || bad "a forward-port PR exists for a conflicting change"
 wait_for 300 "update PR in $P_EXP" bash -c ". '$LAB_ROOT/ops/bin/lib.sh'; [ -n \"\$(api GET '/repos/$SITE_ORG/$P_EXP/pulls?state=open&limit=50' | jq -r '.[]|select(.head.ref==\"update/$BASE-1.0.3\")|.number')\" ]" \
   && ok "$P_EXP (re-subscribed, still on 1.x) received update/$BASE-1.0.3" || bad "no 1.0.3 update PR in $P_EXP"
 for p in "$P_OLD" "$P_NEW" "$P_PIN"; do
@@ -276,12 +306,10 @@ fi
 migrate_exp() { composer_in "$1" require "$PBASE:^2.0" --no-progress >/dev/null 2>&1; }
 project_change "$P_EXP" "migrate/2.0" "Move to $BASE 2.0 (renewed support)" migrate_exp && ok "$P_EXP: migration to 2.0 merged" || bad "$P_EXP migration failed"
 [ "$(lock_version "$SITE_ORG/$P_EXP" "$PBASE")" = v2.0.0 ] && ok "$P_EXP is on v2.0.0" || bad "$P_EXP lock: $(lock_version "$SITE_ORG/$P_EXP" "$PBASE")"
-api POST "/repos/$PBASE/branches" '{"new_branch_name":"2.x","old_ref_name":"v2.0.0"}' >/dev/null
-wait_for_branch "$MODULE_ORG" "$BASE" 2.x 60 >/dev/null 2>&1
-api POST "/repos/$PBASE/branch_protections" '{"rule_name":"2.x","enable_push":false,"enable_status_check":true,"status_check_contexts":["checks / checks (pull_request)"],"required_approvals":0}' >/dev/null
+[ "$(http_code GET "/repos/$PBASE/branches/2.x")" = 200 ] || die "2.x branch missing"
 d=$WORK/fix2; git clone -q "$(dev_url "$SITE_ORG/$P_EXP")" "$d" 2>/dev/null
 ( cd "$d" && git config user.name "Dev One" && git config user.email dev@example.test && git switch -q -c "fix/2x-$ts" \
-  && echo "/* $ts: 2.x fix */" >> "vendor/$PBASE/css/banner.css" && git commit -qam "Fix on the 2.x line" && git push -q origin "fix/2x-$ts" ) >/dev/null 2>&1
+  && echo "# $ts: 2.x fix" >> "vendor/$PBASE/ait_banners.info.yml" && git commit -qam "Fix on the 2.x line" && git push -q origin "fix/2x-$ts" ) >/dev/null 2>&1
 bot2="up/$P_EXP/fix-2x-$ts"
 wait_for 600 "Upstream MR" bash -c ". '$LAB_ROOT/ops/bin/lib.sh'; [ -n \"\$(api GET '/repos/$PBASE/pulls?state=open&limit=50' | jq -r '.[]|select(.head.ref==\"$bot2\")|.number')\" ]" \
   && ok "Upstream opened a merge request from $P_EXP" || die "no Upstream MR from the 2.x client"
@@ -289,6 +317,7 @@ mr=$(open_pr_number "$PBASE" "$bot2")
 [ "$(api GET "/repos/$PBASE/pulls/$mr" | jq -r .base.ref)" = 2.x ] && ok "MR #$mr targets the 2.x branch (client locked to 2.0.0), not 1.x and not main" \
   || bad "MR #$mr targets $(api GET "/repos/$PBASE/pulls/$mr" | jq -r .base.ref), expected 2.x"
 wait_for 600 "module Checks" is_success "$PBASE" "$bot2" && merge_pr "$PBASE" "$mr" && ok "2.x MR passed Checks and merged" || die "2.x MR did not pass/merge"
+fp3=$(wait_pr "$PBASE" "fwd/2.x/" main 300) && ok "the 2.x fix was forward-ported to main automatically (PR #$fp3)" || bad "no forward-port PR 2.x -> main for the client's fix"
 tag_release "$PBASE" 2.x v2.0.1 && wait_for 180 "v2.0.1 indexed" pk_has "$PBASE" v2.0.1 && ok "v2.0.1 tagged on the 2.x branch" || die "cannot release v2.0.1"
 c=$(release_result "$PBASE" v2.0.1); [ "$c" = success ] && ok "Release job for v2.0.1 finished: $c" || bad "Release job for v2.0.1: $c"
 for p in "$P_OLD" "$P_NEW" "$P_EXP"; do
