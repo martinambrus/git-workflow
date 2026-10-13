@@ -118,3 +118,16 @@ ensure_main_protection() { local org=$1 name=$2
     api POST "/repos/$org/$name/branch_protections" "$body" | jq -r '.rule_name // .message' | sed 's/^/   protected: /'
   fi
 }
+
+# ensure_release_line_protection ORG NAME -> every maintenance branch (1.x, 2.x, 10.x, 1.2.x ...) gets the same rule as
+# main (PR only, Checks required, admins included) as soon as it exists, via one glob rule. Gitea matches the glob
+# against the branch name; `feat.x` is not matched, `9.x` is.
+ensure_release_line_protection() { local org=$1 name=$2 rule='[0-9]*.x'
+  local body='{"rule_name":"[0-9]*.x","enable_push":false,"enable_status_check":true,"status_check_contexts":["checks / checks (pull_request)"],"required_approvals":0}'
+  local enc; enc=$(printf '%s' "$rule" | jq -sRr @uri)
+  if [ "$(http_code GET "/repos/$org/$name/branch_protections/$enc")" = 200 ]; then
+    api PATCH "/repos/$org/$name/branch_protections/$enc" "$body" >/dev/null
+  else
+    api POST "/repos/$org/$name/branch_protections" "$body" | jq -r '.rule_name // .message' | sed 's/^/   protected release lines: /'
+  fi
+}

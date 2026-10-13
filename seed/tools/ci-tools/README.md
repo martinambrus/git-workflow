@@ -50,3 +50,9 @@ loudly instead of guessing.
 The Upstream bot branch is now cut from the **locked tag**, as documented. Before, it was cut from the module
 repository's default branch, which only worked while `main` still equalled the tag (found by the release-line
 scenarios: a project on 1.x could not send a fix once `main` had moved to 2.0.0).
+
+## Forward-port (v1.4.0)
+
+| Script | Run in | What it does |
+| --- | --- | --- |
+| `bin/forward-port.sh` | module repo, push to a maintenance branch `<N>.x` | cherry-picks each new first-parent commit (a merged MR is taken with `-m 1`) onto the **next higher** `<M>.x`, or the default branch if there is none, on `fwd/<src>/<sha>-to-<target>`, and opens a PR. Merging that PR triggers the next hop (1.x -> 2.x -> main). Already-applied changes are skipped; a conflict opens an issue naming the files and fails the job. Idempotent (a marker in the PR/issue body). |
