@@ -16,8 +16,8 @@ git clone https://github.com/martinambrus/git-workflow.git && cd git-workflow
 ./lab e2e        # scaffolds both Drupal sites if missing, then runs the WHOLE workflow with assertions
 ```
 
-`./lab e2e` is the proof that everything works on your machine (about 15 to 25 minutes the first time, mostly
-Composer and CI reinstalls). It prints PASS/FAIL per step and exits non-zero on any failure. It is re-runnable on a
+`./lab e2e` is the proof that everything works on your machine (measured here after `./lab up`: about 4.5 minutes with
+warm Docker/Composer caches; expect longer on a cold machine, mostly Composer and the CI reinstalls). It prints PASS/FAIL per step and exits non-zero on any failure. It is re-runnable on a
 used lab: each run releases the next patch version. `./lab e2e --quick` skips the smoke and customer tests.
 `./lab destroy -y` wipes everything (including DDEV sites and local clones) for a from-scratch run.
 
@@ -63,6 +63,17 @@ The replay found three bugs that the incremental build had hidden (all fixed):
 25. Right after the first push Gitea's branch API does not list `main` yet (async), so protection was skipped silently.
     The scaffold now waits for the branch.
 26. `./lab destroy` left the external proxy and its network behind (it only knew the `build` profile).
+
+Re-testing with `./lab e2e` from a wiped machine (destroy, fresh clone, the three README commands) found two more
+problems, both fixed; after that **two consecutive from-scratch runs passed 44/44** and a re-run on a used lab
+passed 39/39 (it releases the next patch version):
+
+27. After seeding the module, Gitea did not serve `main` for a moment, so `activit/ait_banners` was **never
+    registered in Packeton** and the scaffold failed with "could not be found in any version". Same async-branch race
+    as finding 25. Fixed in `seed_repo`/`register_package`; `./lab e2e` now heals with a `sync` and asserts the
+    registration before doing anything else.
+28. Drupal writes `config/sync/.htaccess` lazily, after the scaffold's commit, so a freshly scaffolded project had a
+    dirty working tree and the release cycle (rightly) refused to start. It is now in the project's `.gitignore`.
 
 Prerequisites on a new machine (the lab does not install them): Docker + Compose, `git`, `curl`, `jq`, `python3`,
 DDEV with `ddev config global --router-http-port=8080 --router-https-port=8443`, `mkcert -install`, and (optional)
