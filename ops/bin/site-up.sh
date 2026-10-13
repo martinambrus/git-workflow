@@ -12,6 +12,7 @@ for name in $targets; do
   say "$name"
   ( cd "$dir"
     ddev start >/dev/null
+    ddev_composer_auth "$dir"
     if ddev drush status --field=bootstrap 2>/dev/null | grep -q Successful; then
       echo "   database present, nothing to install"
     else

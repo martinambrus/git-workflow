@@ -67,6 +67,10 @@ Verified with the real Drupal projects (plan 14.4): `drupal-custom-module` lands
 with the stock `drupal/recommended-project` installer paths; Packeton's archive honours `export-ignore` (no
 `tests/`, no `.gitattributes` in the install); no nested `.git`; `composer update activit/ait_banners` moves a
 project from `v1.0.0` to `v1.0.1`; DDEV web containers reach Packeton once joined to the `wf-net` network.
+Verified through a full release cycle: MR merged, tag `v1.1.0`, Packeton indexed it in seconds; on the project that
+developed the change (`shop-a`) `composer update` moved only `composer.lock` and Composer's vendor metadata, the module
+folder stayed identical (plan 9.3) and the Upstream job then reported no drift; on `shop-b` the diff was exactly the
+release (5 module files), `drush updb`/`cr` were clean, and the new "Promo badge" field appeared in the admin form.
 Not yet verified: `dev-up/...` branch installs, customer limits, the Release and Update-PR workflows.
 
 5. **`drupal/recommended-project` ships no `.gitignore`**, so Drupal's runtime `web/sites/default/files/` would be
@@ -76,6 +80,13 @@ Not yet verified: `dev-up/...` branch installs, customer limits, the Release and
    existing tags), but the webhook only fires for registered packages. Register first, tag second (plan 4.3 order).
 7. A quoted-colon bug in the first module release (`description: A: b` in `info.yml`) broke site install; fixed as
    `v1.0.1`, as the plan demands (tags are never moved).
+
+8. **Composer silently falls back to its cache when Packeton returns 401.** It prints a warning, uses stale data and
+   exits 0, so `composer update` reports "Nothing to modify" and a new release is never seen. Hit here after a lab
+   rebuild regenerated the Packeton token. The lab now rewrites the credential on every `./lab site` and in
+   `new-drupal-project.sh`. Worth a CI check for the string "could not be fully loaded" in real deployments.
+9. **DDEV's `composer config --global` is per project** (each web container has its own Composer home), so the
+   Packeton credential must be set in every project, not once.
 
 ## Drupal projects (DDEV)
 

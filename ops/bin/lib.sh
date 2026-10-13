@@ -84,3 +84,10 @@ seed_repo() { local org=$1 name=$2 seed=$3
     && echo "   seeded $org/$name from ${seed#$LAB_ROOT/}, tagged v1.0.0"
   rm -rf "$tmp"
 }
+
+# ddev_composer_auth -> (re)write Packeton credentials into DDEV's global Composer config. Needed after every lab
+# rebuild: the Packeton API token changes, and Composer then silently falls back to its stale cache (exit code 0!)
+ddev_composer_auth() { load_secrets
+  ddev composer config --global http-basic.packeton.test admin "$PACKETON_TOKEN" >/dev/null 2>&1 \
+    || ( cd "$1" && ddev composer config --global http-basic.packeton.test admin "$PACKETON_TOKEN" >/dev/null )
+}
