@@ -268,9 +268,11 @@ push to `main` is refused; a `dev` user cannot push a `v*` tag.
 
 *Plan 3 and 5.* Do the whole phase for `shop-a`, then repeat it for `shop-b`.
 
-- [ ] **6.1 Two empty repos** in `sites`: `shop-a`, `shop-b` (Private, empty). Add the repository **topic**
-  `activit-project` to both (repo page → the *gear next to the description → Topics*): this opts a project in to
-  automatic update PRs. 📸
+- [ ] **6.1 Two empty repos** in `sites`: `shop-a`, `shop-b` (Private, empty). 📸
+  ⚠ The repository **topic** `activit-project` (the opt-in for automatic update PRs) cannot be set from the UI yet: an
+  empty repo shows Gitea's "empty repository" page without the topics bar. Add it in 6.6, after the first push
+  (**Manage Topics** on the repo home), or now through the API:
+  `curl -u admin:<password> -X PUT http://gitea.test:3000/api/v1/repos/sites/shop-a/topics/activit-project` (204 = set).
 - [ ] **6.2 Create the Drupal 11 project** (example for `shop-a`; do `shop-b` the same way):
   ```bash
   cd $REPO/workspace
@@ -338,8 +340,10 @@ push to `main` is refused; a `dev` user cannot push a `v*` tag.
   ⚠ `drupal/recommended-project` ships **no** `.gitignore`; without line 1 Drupal's runtime files would be
   committed (finding 5). ⚠ `config/sync/.htaccess` is written lazily by Drupal and would leave the tree dirty
   (finding 28). 🧪 The push is large (25k+ files): that is expected.
-- [ ] **6.6 Protect `main` and delete merged branches** (as in 5.5, pattern `main`, status
-  `checks / checks (pull_request)`, repo → *Settings → Branches*). Do it **after** the first push (finding 24/25).
+- [ ] **6.6 Topic, protect `main`, delete merged branches**, all **after** the first push (finding 24/25): add the topic
+  `activit-project` (**Manage Topics** on the repo home, unless you set it through the API in 6.1); branch rule `main`
+  as in 5.5 (**Disable Push**, **Enable Status Check**, pattern `checks / checks (pull_request)`); *Settings → Repository
+  → Pull Requests*: **Delete pull request branch after merge by default**.
   The first push also triggers *Upstream* and *Checks* runs on the push event. 📸 the Actions tab.
 
 **Done when (both projects):** the front page shows the banner; `composer.lock` has `activit/ait_banners` `v1.0.0`;
