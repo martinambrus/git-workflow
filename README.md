@@ -3,6 +3,9 @@
 A local, rebuildable Gitea + Packeton + Actions runner to test
 [`shared-drupal-modules-workflow.md`](shared-drupal-modules-workflow.md) end to end on one machine.
 
+**Looking for what to change in the plan?** See [`plan-changes.md`](plan-changes.md): the findings below mapped to the
+sections of the plan, with a status table for section 14.4.
+
 ## Quick start
 
 Needs Docker with Compose, `git`, `curl`, `jq`. PHP/Composer are **not** needed on the host.
