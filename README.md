@@ -91,6 +91,12 @@ Update PRs, Checks, protected branches, Packeton grants). 78 assertions:
     flows `1.x -> 2.x -> main`. A change that does not apply opens an **issue** naming the files (and fails the job)
     instead of guessing; already-applied changes are skipped; re-runs are idempotent. Verified: clean two-hop chain,
     a deliberately conflicting change (issue, no PR), and a client's 2.x fix reaching `main`.
+35. **`ddev` blocks for ever on an inherited open stdin.** Launched with stdin as an open pipe/socket that never
+    sends data (CI runners, `ssh host ./lab ...`, IDE tasks, `xargs`), `ddev composer create-project` printed nothing
+    and hung (reproduced with a socket as stdin; it runs instantly with `</dev/null`). Interactive terminals are not
+    affected, which is why it only showed up in unattended runs. All `ddev` calls in the lab scripts now run with
+    stdin closed; the scaffold also has a timeout with a clean retry. Worth a line in the plan's developer/CI notes.
+
 34. **One unexplained intermittent failure.** Of the full from-scratch runs with these scenarios, one (the 2nd) failed
     in the release-line part: the `new` client's migration PR to 2.0 failed immediately (instant failure, not a
     Checks timeout) and the lock read for that repo came back empty. The identical commit then passed in 6 further runs

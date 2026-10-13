@@ -17,6 +17,9 @@ MODULE_ORG=activit                 # shared modules (plan: "activit" organizatio
 SITE_ORG=sites                     # Drupal projects
 
 mkdir -p "$STATE"; touch "$SECRETS"
+# ddev reads stdin: with an inherited, silent pipe or socket (CI, ssh, IDE tasks, xargs) `ddev composer` blocks for
+# ever without printing anything. The lab scripts are non-interactive, so every ddev call gets stdin closed.
+ddev() { command ddev "$@" </dev/null; }
 dc()  { docker compose --project-directory "$OPS" -f "$OPS/docker-compose.yml" "$@"; }
 say() { printf '== %s\n' "$*"; }
 setval() { grep -v "^$1=" "$SECRETS" > "$SECRETS.tmp" || true; echo "$1=$2" >> "$SECRETS.tmp"; mv "$SECRETS.tmp" "$SECRETS"; }
