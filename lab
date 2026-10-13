@@ -16,7 +16,7 @@ case $cmd in
   logs)     dc logs -f --tail 50 "$@" ;;
   down)     dc down ;;
   destroy)  read -r -p "Delete ALL lab data (Gitea repos, Packeton, runner, ops/.state, ops/.env)? [y/N] " a
-            [ "$a" = y ] && { dc --profile build down -v; rm -rf "$OPS/.state" "$OPS/.env"; echo "destroyed. Local clones in modules/ and projects/ are kept; delete them by hand."; } ;;
+            [ "$a" = y ] && { dc --profile build --profile external down -v --remove-orphans; rm -rf "$OPS/.state" "$OPS/.env"; echo "destroyed. Local clones in modules/ and projects/ are kept; delete them by hand."; } ;;
   reset)    "$0" destroy && "$0" up ;;
   site)     "$ROOT/ops/bin/site-up.sh" "${1:-all}" ;;
   external) "$ROOT/ops/bin/external.sh" "${1:-up}" ;;
