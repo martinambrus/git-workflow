@@ -596,9 +596,12 @@ into a merge request in the module repo.
 - [ ] **12.1** In shop-a (on a branch): append a CSS comment to
   `web/modules/custom/ait_banners/css/banner.css`, commit, push.
 - [ ] **12.2** ✅ The *Upstream* run (project → *Actions*) opens a merge request in `activit/ait_banners` from branch
-  `up/shop-a/<your-branch>`; because shop-a is locked to a **1.x** release **and the branch `1.x` exists**, its
-  target is `1.x` (not `main`). The project PR gets one comment with the link. 📸 Merge it, tag `v1.1.x` on 1.x
-  (10.2), and the loop closes. ⚠ A project *cannot* merge to `main` while its module folder differs from the release
+  `up/shop-a/<your-branch>` (slashes become dashes: `up/shop-a/fix-banner-css`); because shop-a is locked to a **1.x** release **and the branch `1.x` exists**, its
+  target is `1.x` (not `main`). The project PR gets one comment with the link
+  *if it was already open when Upstream ran* (it runs on push: pushed first and opened the PR after → no comment yet;
+  re-run the Upstream run, or the next push adds it). 📸 Merge it, tag the next `v1.1.x` on 1.x
+  (10.2): shop-a gets a normal update PR that brings the change back as a release; merge it and **close** the
+  project PR unmerged (its change is now in the release). The loop closes. ⚠ A project *cannot* merge to `main` while its module folder differs from the release
   (Checks fail on PRs into `main`; plan 6.6). ⚠ Never commit to an `up/...` branch by hand.
 
 ---
