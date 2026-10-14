@@ -665,6 +665,9 @@ into a merge request in the module repo.
   `upstream.yml` + `checks.yml` + `commands.yml` in the project; `release.yml`, `release-reminder.yml`,
   `forward-port.yml` and `commands.yml` on the module's release lines (ci-tools `v1.8.0`); and `bot` on the module's
   protected-tag list.
+  Replies (`/merge`, `/release`) run the `commands.yml` of the repo's **default branch** (`main`): until it is there,
+  a reply does nothing at all (no run, no answer). Merge the forward-port PR that carries the new workflows to `main`
+  with the button, then post the reply again (Gitea reacts to new comments only).
 ---
 
 ## Phase 13 — Optional: external customers in Packeton
