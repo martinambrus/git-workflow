@@ -3,6 +3,10 @@
 A local, rebuildable Gitea + Packeton + Actions runner to test
 [`shared-drupal-modules-workflow.md`](shared-drupal-modules-workflow.md) end to end on one machine.
 
+**The plan, as built and verified:** [`shared-drupal-modules-workflow.md`](shared-drupal-modules-workflow.md), with its
+diagram for developers and Ops in [`shared-drupal-modules-workflow.html`](shared-drupal-modules-workflow.html) (open it in a
+browser). [`plan-changes.md`](plan-changes.md) records why each part of the plan changed during the pilot.
+
 **Setting this up by hand (to learn it and screenshot it for ops)?** `./lab bare up` starts a *bare* Gitea 28.1 +
 Packeton with nothing configured, and [`manual/TASKLIST.md`](manual/TASKLIST.md) walks you through everything
 else step by step: Gitea and Packeton setup, runner, module repo, two Drupal 11 projects, a hook release, an
@@ -234,6 +238,8 @@ Update PRs, Checks, protected branches, Packeton grants). 78 assertions:
     detached from `wf-net` and reattached afterwards): `./lab up` from scratch, `./lab e2e lines` **85 passed, 0
     failed** (incl. the release reminder, the in-place release into the developer's PR, the forward-port prompt and the
     overview over two hops), `./lab destroy`, then the walkthrough came back intact.
+    Afterwards, with the walkthrough finished and its DDEV sites deleted, the **full** `./lab e2e` ran from scratch:
+    **53 + 85 = 138 passed, 0 failed** (after the fix of finding 43).
 
 43. **A second identical rebuild restarted the module MR's Checks** (full `./lab e2e`, 2026-10-14): the Upstream job runs
     for the push *and* for the opened PR; both rebuilt the bot branch with the same content but a new commit and

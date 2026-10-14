@@ -1,0 +1,378 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Shared Drupal Modules Workflow</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a single reading column; wide diagrams scroll inside their own frames. Ochre = people, steel = automation, plum = registry. */
+:root {
+  --bg: #F4F6F8; --surface: #FFFFFF; --ink: #17202B; --ink-2: #4E5A68; --line: #CBD3DC; --line-strong: #8A96A4;
+  --people: #9A6510; --people-bg: #FBF1DF; --people-ink: #5E3D06;
+  --auto: #22678A; --auto-bg: #E3F0F6; --auto-ink: #123F56;
+  --reg: #6B4690; --reg-bg: #EFE7F7; --reg-ink: #3F2758;
+  --neutral-bg: #EEF1F4; --code-bg: #EBEFF3;
+  --font-sans: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #12171D; --surface: #1A2129; --ink: #E4E9EF; --ink-2: #A3AEBB; --line: #2E3843; --line-strong: #6B7886;
+  --people: #E2AE55; --people-bg: #33270F; --people-ink: #F6DDAF;
+  --auto: #6DB6D9; --auto-bg: #12303F; --auto-ink: #CBE7F4;
+  --reg: #B996DD; --reg-bg: #2A1E3A; --reg-ink: #E6D7F5;
+  --neutral-bg: #222B35; --code-bg: #222B35; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #12171D; --surface: #1A2129; --ink: #E4E9EF; --ink-2: #A3AEBB; --line: #2E3843; --line-strong: #6B7886;
+  --people: #E2AE55; --people-bg: #33270F; --people-ink: #F6DDAF;
+  --auto: #6DB6D9; --auto-bg: #12303F; --auto-ink: #CBE7F4;
+  --reg: #B996DD; --reg-bg: #2A1E3A; --reg-ink: #E6D7F5;
+  --neutral-bg: #222B35; --code-bg: #222B35; color-scheme: dark }
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font-family: var(--font-sans); font-size: 15px; line-height: 1.6; padding: 0 16px; }
+.wrap { max-width: 1040px; margin: 0 auto; padding-block: 40px 64px; display: grid; gap: 48px; }
+header { display: grid; gap: 10px; }
+.eyebrow { font-family: var(--font-mono); font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-2); }
+h1 { font-size: clamp(26px, 4vw, 36px); line-height: 1.15; margin: 0; font-weight: 600; text-wrap: balance; }
+h2 { font-size: 22px; margin: 0; font-weight: 600; text-wrap: balance; }
+h3 { font-size: 16px; margin: 0; font-weight: 600; }
+p { margin: 0; max-width: 68ch; }
+.lede { color: var(--ink-2); font-size: 16px; }
+code { font-family: var(--font-mono); font-size: .88em; background: var(--code-bg); padding: 1px 5px; border-radius: 4px; overflow-wrap: anywhere; }
+section { display: grid; gap: 16px; }
+.legend { display: flex; flex-wrap: wrap; gap: 8px 20px; font-size: 13px; color: var(--ink-2); }
+.legend span { display: inline-flex; align-items: center; gap: 8px; }
+.sw { width: 14px; height: 14px; border-radius: 3px; border: 1.5px solid; }
+.sw.people { background: var(--people-bg); border-color: var(--people); }
+.sw.auto { background: var(--auto-bg); border-color: var(--auto); }
+.sw.reg { background: var(--reg-bg); border-color: var(--reg); }
+.sw.neu { background: var(--neutral-bg); border-color: var(--line-strong); }
+figure { margin: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px; display: grid; gap: 12px; }
+.scroll { overflow-x: auto; }
+figure svg { display: block; width: 100%; min-width: 760px; height: auto; color: var(--ink-2); }
+figcaption { font-size: 13px; color: var(--ink-2); max-width: 80ch; }
+svg text { font-family: var(--font-sans); }
+svg .tt { font-size: 14px; font-weight: 600; }
+svg .ts { font-size: 12px; }
+svg .tm { font-size: 12px; font-family: var(--font-mono); }
+svg .lbl { font-size: 12px; fill: var(--ink-2); }
+svg .zone { fill: none; stroke: var(--line-strong); stroke-dasharray: 6 5; stroke-width: 1; }
+svg .zlbl { font-size: 12px; font-family: var(--font-mono); fill: var(--ink-2); letter-spacing: .06em; }
+svg .wire { fill: none; stroke: var(--line-strong); stroke-width: 1.5; }
+svg .wire.dash { stroke-dasharray: 5 4; }
+svg .b-people { fill: var(--people-bg); stroke: var(--people); stroke-width: 1.5; }
+svg .b-auto { fill: var(--auto-bg); stroke: var(--auto); stroke-width: 1.5; }
+svg .b-reg { fill: var(--reg-bg); stroke: var(--reg); stroke-width: 1.5; }
+svg .b-neu { fill: var(--neutral-bg); stroke: var(--line-strong); stroke-width: 1; }
+svg .b-box { fill: var(--surface); stroke: var(--line-strong); stroke-width: 1; }
+svg .i-people { fill: var(--people-ink); }
+svg .i-auto { fill: var(--auto-ink); }
+svg .i-reg { fill: var(--reg-ink); }
+svg .i-neu { fill: var(--ink); }
+svg .i-sub { fill: var(--ink-2); }
+.flows { display: grid; gap: 40px; }
+.flow { display: grid; gap: 14px; }
+.flow-head { display: grid; gap: 6px; }
+ol.steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 0; counter-reset: s; }
+ol.steps > li { counter-increment: s; display: grid; grid-template-columns: 44px 1fr; gap: 0 14px; position: relative; padding-bottom: 18px; }
+ol.steps > li::before { content: counter(s); grid-row: 1 / span 3; width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; font-family: var(--font-mono); font-size: 13px; font-weight: 500; background: var(--surface); border: 1.5px solid var(--line-strong); color: var(--ink); z-index: 1; }
+ol.steps > li:not(:last-child)::after { content: ""; position: absolute; left: 15px; top: 32px; bottom: 0; width: 2px; background: var(--line); }
+ol.steps > li.people::before { border-color: var(--people); background: var(--people-bg); color: var(--people-ink); }
+ol.steps > li.auto::before { border-color: var(--auto); background: var(--auto-bg); color: var(--auto-ink); }
+ol.steps > li.reg::before { border-color: var(--reg); background: var(--reg-bg); color: var(--reg-ink); }
+.step-top { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 10px; min-width: 0; padding-top: 4px; }
+.chip { font-family: var(--font-mono); font-size: 11px; letter-spacing: .04em; padding: 1px 8px; border-radius: 999px; border: 1px solid; white-space: nowrap; }
+.chip.people { color: var(--people-ink); background: var(--people-bg); border-color: var(--people); }
+.chip.auto { color: var(--auto-ink); background: var(--auto-bg); border-color: var(--auto); }
+.chip.reg { color: var(--reg-ink); background: var(--reg-bg); border-color: var(--reg); }
+.step-body { min-width: 0; color: var(--ink); font-size: 14px; display: grid; gap: 6px; margin-top: 4px; }
+.meta { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 13px; color: var(--ink-2); }
+.meta b { font-weight: 500; color: var(--ink); }
+.tablewrap { overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; }
+table { border-collapse: collapse; width: 100%; min-width: 640px; font-size: 14px; }
+th, td { text-align: left; vertical-align: top; padding: 10px 14px; border-bottom: 1px solid var(--line); }
+th { font-family: var(--font-mono); font-size: 12px; font-weight: 500; letter-spacing: .05em; text-transform: uppercase; color: var(--ink-2); background: var(--neutral-bg); }
+tr:last-child td { border-bottom: 0; }
+td:first-child { font-weight: 500; white-space: nowrap; }
+.note { font-size: 13px; color: var(--ink-2); }
+ul.plain { margin: 0; padding-left: 20px; display: grid; gap: 4px; max-width: 80ch; font-size: 14px; }
+</style>
+
+<div class="wrap">
+<header>
+  <div class="eyebrow">Elmont call · plan revised 14 October 2026, after the pilot lab</div>
+  <h1>Shared Drupal modules workflow</h1>
+  <p class="lede">How a shared module travels from its Gitea repository to every project and customer, and how fixes made inside a project travel back. The first diagram is the developer's view; the rest is what Ops needs to build it. Everything shown ran in the pilot lab (Gitea 28.1, Packeton, a Gitea Actions runner, Drupal 11) unless the last section lists it as open.</p>
+  <div class="legend" aria-label="Colour legend">
+    <span><i class="sw people"></i>People (devs, main dev, management)</span>
+    <span><i class="sw auto"></i>Gitea Actions jobs on our runners</span>
+    <span><i class="sw reg"></i>Packeton and its customers</span>
+    <span><i class="sw neu"></i>Repositories and servers</span>
+  </div>
+</header>
+
+<section>
+  <h2>The loop, as a developer sees it</h2>
+  <p>Releases go out along the top row. Fixes made inside a project come back along the bottom row and become the next release. The main dev drives both from the developer's pull request, with two replies: <code>/merge</code> and <code>/release</code>.</p>
+  <figure>
+    <div class="scroll">
+    <svg viewBox="0 0 1000 380" role="img" aria-label="Release loop: module repo, release tag by a /release reply, Packeton, Release job delivering into the developer's pull request and update pull requests elsewhere, project repo; fixes return through the upstream job, a bot merge request and a /merge reply back into the module repo, and are forward-ported to newer lines.">
+      <defs><marker id="a1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="currentColor"/></marker></defs>
+      <rect class="b-reg" x="410" y="14" width="160" height="52" rx="8"/>
+      <text class="tt i-reg" x="490" y="37" text-anchor="middle">Unipo (customer)</text>
+      <text class="ts i-sub" x="490" y="56" text-anchor="middle">only its granted versions</text>
+      <rect class="b-neu" x="790" y="14" width="160" height="52" rx="8"/>
+      <text class="tt i-neu" x="870" y="37" text-anchor="middle">Production</text>
+      <text class="ts i-sub" x="870" y="56" text-anchor="middle">vendor/ committed</text>
+
+      <rect class="b-neu" x="30" y="120" width="160" height="64" rx="8"/>
+      <text class="tt i-neu" x="110" y="147" text-anchor="middle">Module repo</text>
+      <text class="tm i-sub" x="110" y="168" text-anchor="middle">main · 1.x → fwd</text>
+      <rect class="b-people" x="220" y="120" width="160" height="64" rx="8"/>
+      <text class="tt i-people" x="300" y="147" text-anchor="middle">Release tag</text>
+      <text class="ts i-sub" x="300" y="168" text-anchor="middle">reply /release v1.1.0</text>
+      <rect class="b-reg" x="410" y="120" width="160" height="64" rx="8"/>
+      <text class="tt i-reg" x="490" y="147" text-anchor="middle">Packeton</text>
+      <text class="ts i-sub" x="490" y="168" text-anchor="middle">per-repo webhook</text>
+      <rect class="b-auto" x="600" y="120" width="160" height="64" rx="8"/>
+      <text class="tt i-auto" x="680" y="147" text-anchor="middle">Release job</text>
+      <text class="ts i-sub" x="680" y="168" text-anchor="middle">dev's PR + update PRs</text>
+      <rect class="b-neu" x="790" y="120" width="160" height="64" rx="8"/>
+      <text class="tt i-neu" x="870" y="147" text-anchor="middle">Project repo</text>
+      <text class="ts i-sub" x="870" y="168" text-anchor="middle">green PR, merge</text>
+
+      <line class="wire" x1="192" y1="152" x2="216" y2="152" marker-end="url(#a1)"/>
+      <line class="wire" x1="382" y1="152" x2="406" y2="152" marker-end="url(#a1)"/>
+      <line class="wire" x1="572" y1="152" x2="596" y2="152" marker-end="url(#a1)"/>
+      <line class="wire" x1="762" y1="152" x2="786" y2="152" marker-end="url(#a1)"/>
+      <line class="wire" x1="490" y1="118" x2="490" y2="70" marker-end="url(#a1)"/>
+      <text class="lbl" x="498" y="98">composer</text>
+      <line class="wire" x1="870" y1="118" x2="870" y2="70" marker-end="url(#a1)"/>
+      <text class="lbl" x="878" y="98">git deploy</text>
+
+      <line class="wire" x1="870" y1="186" x2="870" y2="286" marker-end="url(#a1)"/>
+      <text class="lbl" x="862" y="240" text-anchor="end">next change</text>
+
+      <rect class="b-people" x="790" y="290" width="160" height="64" rx="8"/>
+      <text class="tt i-people" x="870" y="317" text-anchor="middle">Dev edits in place</text>
+      <text class="ts i-sub" x="870" y="338" text-anchor="middle">push, open the PR</text>
+      <rect class="b-auto" x="600" y="290" width="160" height="64" rx="8"/>
+      <text class="tt i-auto" x="680" y="317" text-anchor="middle">Upstream job</text>
+      <text class="ts i-sub" x="680" y="338" text-anchor="middle">diff vs locked tag</text>
+      <rect class="b-neu" x="410" y="290" width="160" height="64" rx="8"/>
+      <text class="tt i-neu" x="490" y="317" text-anchor="middle">Bot merge request</text>
+      <text class="tm i-sub" x="490" y="338" text-anchor="middle">up/&lt;project&gt;/&lt;branch&gt;</text>
+      <rect class="b-people" x="220" y="290" width="160" height="64" rx="8"/>
+      <text class="tt i-people" x="300" y="317" text-anchor="middle">Main dev review</text>
+      <text class="ts i-sub" x="300" y="338" text-anchor="middle">/merge in the dev's PR</text>
+
+      <line class="wire" x1="788" y1="322" x2="764" y2="322" marker-end="url(#a1)"/>
+      <line class="wire" x1="598" y1="322" x2="574" y2="322" marker-end="url(#a1)"/>
+      <line class="wire" x1="408" y1="322" x2="384" y2="322" marker-end="url(#a1)"/>
+      <path class="wire" d="M218 322 L110 322 L110 188" marker-end="url(#a1)"/>
+      <text class="lbl" x="118" y="262">merged fix</text>
+      <line class="wire dash" x1="490" y1="288" x2="490" y2="188" marker-end="url(#a1)"/>
+      <text class="lbl" x="498" y="242">dev- version for testing</text>
+    </svg>
+    </div>
+    <figcaption>Nothing moves a project to a new version by itself. In the project where the change was made, the release lands as one bot commit in the developer's own pull request, which turns green and is merged; every other opted-in project gets an update pull request someone reviews. A fix merged into <code>1.x</code> is forward-ported to the newer lines as pull requests (flow 3). The dashed arrow is optional: Packeton also serves the bot branch as a <code>dev-</code> version, so another project's feature branch can try the fix before it is released.</figcaption>
+  </figure>
+</section>
+
+<section>
+  <h2>System map for Ops</h2>
+  <p>Every component, where it lives on the network, and which credential each connection uses. Gitea stays internal; Packeton is the only thing customers can reach.</p>
+  <figure>
+    <div class="scroll">
+    <svg viewBox="0 0 1000 560" role="img" aria-label="System map: developer machines, Gitea, act_runner and production on the internal network; Packeton straddles the boundary and is reachable from the internet; packagist.org and the customer Unipo are on the internet.">
+      <defs><marker id="a2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="currentColor"/></marker></defs>
+      <rect class="zone" x="16" y="16" width="708" height="528" rx="10"/>
+      <text class="zlbl" x="32" y="530">INTERNAL NETWORK</text>
+      <rect class="zone" x="736" y="16" width="248" height="528" rx="10"/>
+      <text class="zlbl" x="752" y="530">INTERNET</text>
+
+      <rect class="b-people" x="40" y="90" width="180" height="70" rx="8"/>
+      <text class="tt i-people" x="130" y="119" text-anchor="middle">Developer machine</text>
+      <text class="ts i-sub" x="130" y="141" text-anchor="middle">git over SSH · Composer</text>
+
+      <rect class="b-box" x="270" y="70" width="270" height="270" rx="10"/>
+      <text class="tt i-neu" x="286" y="95">Gitea</text>
+      <rect class="b-neu" x="286" y="108" width="238" height="36" rx="6"/>
+      <text class="ts i-neu" x="405" y="130" text-anchor="middle">activit/* module repos</text>
+      <rect class="b-neu" x="286" y="152" width="238" height="36" rx="6"/>
+      <text class="ts i-neu" x="405" y="174" text-anchor="middle">Project repos (vendor/ committed)</text>
+      <rect class="b-neu" x="286" y="196" width="238" height="36" rx="6"/>
+      <text class="ts i-neu" x="405" y="218" text-anchor="middle">ci-tools (scripts, pinned tags)</text>
+      <rect class="b-neu" x="286" y="240" width="238" height="36" rx="6"/>
+      <text class="ts i-neu" x="405" y="262" text-anchor="middle">Container registry: runner image</text>
+      <rect class="b-auto" x="286" y="284" width="238" height="36" rx="6"/>
+      <text class="ts i-auto" x="405" y="306" text-anchor="middle">Actions · webhooks · secrets</text>
+
+      <rect class="b-reg" x="640" y="150" width="180" height="120" rx="8"/>
+      <text class="tt i-reg" x="730" y="182" text-anchor="middle">Packeton</text>
+      <text class="ts i-sub" x="730" y="204" text-anchor="middle">only Composer registry</text>
+      <text class="ts i-sub" x="730" y="224" text-anchor="middle">public HTTPS</text>
+      <text class="ts i-sub" x="730" y="244" text-anchor="middle">no anonymous access</text>
+
+      <rect class="b-reg" x="800" y="50" width="160" height="60" rx="8"/>
+      <text class="tt i-reg" x="880" y="75" text-anchor="middle">Unipo (customer)</text>
+      <text class="ts i-sub" x="880" y="96" text-anchor="middle">Composer + own token</text>
+
+      <rect class="b-auto" x="270" y="400" width="270" height="72" rx="8"/>
+      <text class="tt i-auto" x="405" y="429" text-anchor="middle">act_runner</text>
+      <text class="ts i-sub" x="405" y="451" text-anchor="middle">our image · run: steps only</text>
+
+      <rect class="b-neu" x="40" y="400" width="180" height="72" rx="8"/>
+      <text class="tt i-neu" x="130" y="429" text-anchor="middle">Production</text>
+      <text class="ts i-sub" x="130" y="451" text-anchor="middle">dev modules disabled</text>
+
+      <rect class="b-neu" x="780" y="400" width="180" height="72" rx="8"/>
+      <text class="tt i-neu" x="870" y="429" text-anchor="middle">packagist.org</text>
+      <text class="ts i-sub" x="870" y="451" text-anchor="middle">packages.drupal.org</text>
+
+      <path class="wire" d="M222 125 L250 125 L250 170 L282 170" marker-end="url(#a2)"/>
+      <path class="wire" d="M130 88 L130 44 L700 44 L700 146" marker-end="url(#a2)"/>
+      <text class="lbl" x="300" y="37">composer require / update (personal Packeton token)</text>
+      <line class="wire" x1="542" y1="176" x2="636" y2="176" marker-end="url(#a2)"/>
+      <text class="lbl" x="590" y="167" text-anchor="middle">per-repo webhook</text>
+      <line class="wire" x1="638" y1="236" x2="544" y2="236" marker-end="url(#a2)"/>
+      <text class="lbl" x="590" y="228" text-anchor="middle">clone (bot token)</text>
+      <line class="wire" x1="852" y1="112" x2="792" y2="146" marker-end="url(#a2)"/>
+      <line class="wire" x1="342" y1="342" x2="342" y2="396" marker-end="url(#a2)"/>
+      <text class="lbl" x="350" y="374">jobs</text>
+      <line class="wire" x1="470" y1="398" x2="470" y2="344" marker-end="url(#a2)"/>
+      <text class="lbl" x="478" y="374">BOT_TOKEN</text>
+      <path class="wire" d="M542 420 L760 420 L760 274" marker-end="url(#a2)"/>
+      <text class="lbl" x="556" y="412">PACKETON_TOKEN</text>
+      <line class="wire" x1="542" y1="452" x2="776" y2="452" marker-end="url(#a2)"/>
+      <text class="lbl" x="556" y="444">third-party packages</text>
+      <path class="wire" d="M268 196 L160 196 L160 396" marker-end="url(#a2)"/>
+      <text class="lbl" x="168" y="300">git pull (deploy)</text>
+    </svg>
+    </div>
+    <figcaption>Runners clone <code>ci-tools</code> and repositories, push <code>up/…</code>, <code>update/…</code> and <code>fwd/…</code> branches, comment, merge green pull requests and, on a main dev's <code>/release</code>, create the tag, all with <code>BOT_TOKEN</code>. They ask Packeton for our modules with <code>PACKETON_TOKEN</code> and fetch third-party packages from the internet directly. Gitea 28 must be allowed to send webhooks to Packeton's private address (egress policy). No workflow touches github.com.</figcaption>
+  </figure>
+</section>
+
+<section class="flows">
+  <div class="flow">
+    <div class="flow-head">
+      <h2>Flow 1: release a version</h2>
+      <p>Starts when the main dev has reviewed a module merge request. Ends with the release in the developer's pull request and an update pull request in every other opted-in project.</p>
+    </div>
+    <ol class="steps">
+      <li class="people"><div class="step-top"><span class="chip people">Main dev</span><h3>Reply <code>/merge activit/&lt;module&gt;#N</code></h3></div>
+        <div class="step-body">In the developer's pull request, where the bot's comment asks for it. The bot merges the module merge request into <code>main</code> or <code>1.x</code> once its Checks are green (while they still run, Gitea merges it as soon as they pass). Requests for changes go back to the developer, who changes the project and pushes again.<div class="meta"><span><b>Gitea:</b> protected branches, pull requests only, checks required, admins too</span><span><b>Who:</b> the module org's Owners team</span></div></div></li>
+      <li class="auto"><div class="step-top"><span class="chip auto">Release reminder</span><h3>Ask for the release</h3></div>
+        <div class="step-body">After the merge the bot names the next patch version of that line in the merge request and in the developer's pull request: "reply <code>/release activit/&lt;module&gt; v1.4.3</code>". Nothing is asked for a change that only touches tests or CI files.</div></li>
+      <li class="people"><div class="step-top"><span class="chip people">Main dev</span><h3>Reply <code>/release activit/&lt;module&gt; vX.Y.Z</code></h3></div>
+        <div class="step-body">Patch for fixes, minor for compatible features, major for breaking changes or dropping a Drupal core version. The bot tags it on the project's line and refuses versions that exist, are not newer, belong to another major or would release nothing. Tagging by hand (CLI, or the web UI with the release line selected) works the same. Tags are never moved or reused.<div class="meta"><span><b>Gitea:</b> protected tag pattern <code>v*</code>, main devs and the bot</span></div></div></li>
+      <li class="reg"><div class="step-top"><span class="chip reg">Packeton</span><h3>Index the new version</h3></div>
+        <div class="step-body">The module repository's own webhook sends the tag to Packeton, which lists <code>X.Y.Z</code> within seconds. If it doesn't appear, check the webhook deliveries in Gitea, then press update on the package page.<div class="meta"><span><b>Trigger:</b> per-repo webhook with <code>composer_package_name</code></span><span><b>Credential:</b> bot token in Packeton's <code>auth.json</code></span></div></div></li>
+      <li class="auto"><div class="step-top"><span class="chip auto">Release job</span><h3>Check the tag, wait for Packeton</h3></div>
+        <div class="step-body">Checks the tag format, that <code>composer.json</code> is valid and has no <code>version</code> key, then polls Packeton until the version is listed. Pre-release tags stop here.<div class="meta"><span><b>Repo:</b> module, on tag <code>v*</code></span><span><b>Secrets:</b> <code>BOT_TOKEN</code>, <code>PACKETON_TOKEN</code></span></div></div></li>
+      <li class="auto"><div class="step-top"><span class="chip auto">Release job</span><h3>Deliver: into the developer's PR, update PRs elsewhere</h3></div>
+        <div class="step-body">In the project the change came from, <code>composer update activit/&lt;module&gt;</code> runs on the developer's branch: one commit, never forced, and that pull request turns green. Every other project with the topic <code>activit-project</code> whose constraint allows the version gets <code>update/&lt;module&gt;-X.Y.Z</code> with <code>vendor/</code> and <code>composer.lock</code> committed. Several open pull requests for the module, or a moved branch, fall back to an update pull request.<div class="meta"><span><b>Opted in:</b> new Elmont projects; others once migrated</span></div></div></li>
+      <li class="auto"><div class="step-top"><span class="chip auto">Checks job</span><h3>Run the required checks</h3></div>
+        <div class="step-body">No gitlinks or nested <code>.git</code>, no symlinks out of the project, no <code>dev-</code> or RC versions of <code>activit/*</code> on <code>main</code>, and no drift between <code>vendor/</code> and a clean <code>composer install</code> with dev dependencies (package files compared; Composer's generated files checked through <code>installed.json</code>).</div></li>
+      <li class="people"><div class="step-top"><span class="chip people">Developer / reviewer</span><h3>Merge</h3></div>
+        <div class="step-body">The developer merges their own green pull request. In other projects a reviewer reads the update's diff (it is the whole release), tests on staging (<code>drush updb</code>, <code>drush cim</code>, <code>drush cr</code>) and merges; update pull requests are never merged automatically.</div></li>
+      <li><div class="step-top"><h3>Deploy from Git</h3></div>
+        <div class="step-body">Production pulls <code>main</code>. Dev-only modules are deployed but stay disabled. Rollback is a <code>git revert</code> of the update commit.</div></li>
+    </ol>
+  </div>
+
+  <div class="flow">
+    <div class="flow-head">
+      <h2>Flow 2: send a fix back to the module</h2>
+      <p>Starts when a developer edits module code inside a project. Ends as a merge request in the module repository, which then enters flow 1.</p>
+    </div>
+    <ol class="steps">
+      <li class="people"><div class="step-top"><span class="chip people">Dev A</span><h3>Edit in place, push the project branch, open the PR</h3></div>
+        <div class="step-body">Change files under <code>web/modules/custom/&lt;module&gt;/</code> and debug on the real site. The folder has no <code>.git</code> of its own, so commits go to the project. The pull request into <code>main</code> stays red until the change is released, and nobody can merge it before.</div></li>
+      <li class="auto"><div class="step-top"><span class="chip auto">Upstream job</span><h3>Compare each module with its locked release</h3></div>
+        <div class="step-body">Reads <code>composer.lock</code> and <code>vendor/composer/installed.json</code> for <code>activit/*</code> and their locked tags, reverses the project's declared client patches, then diffs <code>git archive</code> of each tag against the project folder. No difference means nothing to do.<div class="meta"><span><b>Repo:</b> project, on push to any branch and when a PR is opened</span></div></div></li>
+      <li class="auto"><div class="step-top"><span class="chip auto">Upstream job</span><h3>Rebuild the bot branch from the locked tag</h3></div>
+        <div class="step-body">Cuts <code>up/&lt;project&gt;/&lt;branch&gt;</code> from the locked tag, applies the difference as one commit listing the project commits and authors, checks it matches the folder, then pushes it, unless an identical branch is already there. A change already merged but not released gets no second merge request.<div class="meta"><span><b>Target:</b> <code>&lt;major&gt;.x</code> if it exists, else <code>main</code></span><span><b>Secret:</b> <code>BOT_TOKEN</code></span></div></div></li>
+      <li class="auto"><div class="step-top"><span class="chip auto">Upstream job</span><h3>Open the merge request, comment in the developer's PR</h3></div>
+        <div class="step-body">One comment: what the pull request changes, where it was sent, and the reply the main dev gives: <code>/merge activit/&lt;module&gt;#N</code>. Every further push updates the same merge request.</div></li>
+      <li class="reg"><div class="step-top"><span class="chip reg">Packeton</span><h3>Serve the bot branch as a <code>dev-</code> version</h3></div>
+        <div class="step-body">The webhook covers branches too, so another project's feature branch can run <code>composer require activit/&lt;module&gt;:dev-up/&lt;project&gt;/&lt;branch&gt;@dev</code>. An RC tag with <code>@RC</code> is the alternative.</div></li>
+      <li class="people"><div class="step-top"><span class="chip people">Dev B</span><h3>Continue on the same branch</h3></div>
+        <div class="step-body"><code>git clone</code> and <code>git switch</code> are all it takes, with no Composer or token. Their push updates the same merge request.</div></li>
+      <li class="people"><div class="step-top"><span class="chip people">Main dev</span><h3>Review, then <code>/merge</code> and <code>/release</code></h3></div>
+        <div class="step-body">Continues as flow 1, all in the developer's pull request. The release lands there as one bot commit; the developer merges it.</div></li>
+    </ol>
+  </div>
+
+  <div class="flow">
+    <div class="flow-head">
+      <h2>Flow 3: carry a fix to the newer lines</h2>
+      <p>Module branches are release lines: <code>main</code> for the newest major, <code>&lt;N&gt;.x</code> for each older one still supported. Starts when a change is merged into an old line. Ends with it released on the newer lines, or with an issue.</p>
+    </div>
+    <ol class="steps">
+      <li class="auto"><div class="step-top"><span class="chip auto">Forward-port job</span><h3>Cherry-pick onto the next newer line</h3></div>
+        <div class="step-body">On every push to <code>&lt;N&gt;.x</code>: each merged change becomes a pull request into the next newer line (<code>2.x</code> if it exists, else <code>main</code>). Merging it there triggers the next hop. A change that does not apply cleanly opens an issue with the conflicting files and the commands to port it by hand, and no pull request.<div class="meta"><span><b>Branch:</b> <code>fwd/&lt;line&gt;/&lt;sha&gt;-to-&lt;target&gt;</code></span></div></div></li>
+      <li class="people"><div class="step-top"><span class="chip people">Main dev</span><h3>Reply <code>/release vX.Y.Z</code> or <code>/merge</code></h3></div>
+        <div class="step-body">The bot's prompt on the forward-port pull request names the next version of that line. <code>/release</code> merges it and tags the merge commit, and lists what the release contains (everything unreleased on that line). <code>/merge</code> only merges; a reminder then asks for <code>/release</code>. Changes to tests or CI files only get "nothing to release, merge it".</div></li>
+      <li class="auto"><div class="step-top"><span class="chip auto">Release job</span><h3>Update pull requests on that line</h3></div>
+        <div class="step-body">Projects on the newer line get their normal update pull request (flow 1). Forward-porting moves code; only a release delivers it.</div></li>
+      <li class="auto"><div class="step-top"><span class="chip auto">Bot</span><h3>"Where this change went"</h3></div>
+        <div class="step-body">The developer's pull request the change came from keeps one comment listing every hop and its state: open, merged, released as <code>vX</code>, already there, or does not apply cleanly. It moves to the end of the conversation whenever it changes.</div></li>
+    </ol>
+  </div>
+
+  <div class="flow">
+    <div class="flow-head">
+      <h2>Flow 4: give a customer access</h2>
+      <p>External customers such as Unipo only ever talk to Packeton. Gitea has no customer organizations or accounts.</p>
+    </div>
+    <ol class="steps">
+      <li class="people"><div class="step-top"><span class="chip people">Management</span><h3>Set the contract terms</h3></div>
+        <div class="step-body">Which packages, which versions, and the support and grant dates. These are set per client and per contract and change over time.</div></li>
+      <li class="people"><div class="step-top"><span class="chip people">Main dev</span><h3>Create the customer in Packeton</h3></div>
+        <div class="step-body"><b>Settings → My groups:</b> a group with the granted packages and a <b>Version</b> per package (<code>&lt;2.0</code> for the 1.x line). <b>Settings → My users:</b> a user without password (API only) in that group. Hand over the URL and the user's API token.</div></li>
+      <li class="reg"><div class="step-top"><span class="chip reg">Unipo</span><h3>Install with Composer</h3></div>
+        <div class="step-body"><code>composer config repositories.activit composer https://&lt;packeton-host&gt;</code>, add the token with <code>composer config http-basic.&lt;packeton-host&gt;</code>, then <code>composer require activit/ait_demo</code>. They see only the granted versions; anything else is 404, and without the token 401.</div></li>
+      <li class="reg"><div class="step-top"><span class="chip reg">Packeton</span><h3>Freeze, renew</h3></div>
+        <div class="step-body">The user's <b>Update expiration date</b> freezes the customer on what was released before it; their installs keep working (not <b>Access expiration date</b>, which locks them out). A renewal clears the date and widens the version; their project moves to a new major only when they run <code>composer require …:^2.0</code>.</div></li>
+    </ol>
+  </div>
+</section>
+
+<section>
+  <h2>Ops setup checklist</h2>
+  <div class="tablewrap">
+    <table>
+      <thead><tr><th>Component</th><th>Setting</th></tr></thead>
+      <tbody>
+        <tr><td>Gitea</td><td>Gitea 28: Actions is on by default. In <code>app.ini</code>: <code>EGRESS_MODE = lax</code> and <code>ALLOWED_HOST_LIST = private,loopback</code> (or Packeton's host), so webhooks reach Packeton; self-registration off; default branch <code>main</code>.</td></tr>
+        <tr><td>Runner</td><td>At least one <code>act_runner</code> with labels pointing at our own image. Each Checks run reinstalls Drupal core (about a minute); size capacity for push and pull request runs.</td></tr>
+        <tr><td>Runner image</td><td><code>git</code>, <code>curl</code>, <code>jq</code>, <code>openssh-client</code>, <code>patch</code>, <code>perl</code>, PHP with the extensions Composer needs and <code>yaml</code>, Composer. Stored at <code>&lt;gitea-host&gt;/activit/runner:&lt;tag&gt;</code>. Outbound internet for packagist.org and packages.drupal.org.</td></tr>
+        <tr><td>Workflows</td><td>Only <code>run:</code> steps, never <code>uses:</code>. Each stub clones <code>ci-tools</code> at a pinned tag with <code>BOT_TOKEN</code> and runs a script. Modules: <code>checks</code>, <code>release</code>, <code>release-reminder</code>, <code>forward-port</code>, <code>commands</code>. Projects: <code>checks</code>, <code>upstream</code>, <code>commands</code>. Replies only work once <code>commands.yml</code> is on the default branch.</td></tr>
+        <tr><td>Organizations, teams</td><td><code>activit</code> (modules, <code>ci-tools</code>) and <code>sites</code> (projects). Team <code>devs</code> with general Write on all repositories in both: developers and the bot. Main devs: the <code>activit</code> Owners team.</td></tr>
+        <tr><td>Bot account</td><td>An ordinary user (type Individual). Token with <code>write:repository</code>, <code>write:issue</code>, <code>write:organization</code>, <code>read:user</code>, stored as org secret <code>BOT_TOKEN</code> in both organizations. Packeton token with read access to all <code>activit/*</code>, stored as <code>PACKETON_TOKEN</code>.</td></tr>
+        <tr><td>Branch protection</td><td>Modules: <code>main</code> and one glob rule <code>[0-9]*.x</code> for all release lines; projects: <code>main</code>. Pull requests only, status check <code>checks / checks (pull_request)</code>, <b>Administrators must follow branch protection rules</b>; on <code>[0-9]*.x</code> the main devs may push (creating a line). Delete branches after merge. Projects are protected after their first push.</td></tr>
+        <tr><td>Tag protection</td><td>Pattern <code>v*</code>: main devs and the bot (which tags only on a main dev's <code>/release</code>; leave it out to keep tagging manual).</td></tr>
+        <tr><td>Webhooks</td><td>One per module repository, type Gitea, JSON, events push, create, delete, to <code>/api/update-package?username=…&amp;apiToken=…&amp;composer_package_name=activit/&lt;module&gt;</code>. No organization webhook: Packeton cannot match its payload.</td></tr>
+        <tr><td>Packeton</td><td>Docker image <code>packeton/packeton</code>, persistent volume on <code>/data</code>, HTTPS at <code>&lt;packeton-host&gt;</code>, <code>PUBLIC_ACCESS=false</code>. Read access to Gitea: the bot token in <code>/data/composer/auth.json</code> (host key with port) and <code>secure-http: false</code> for an internal HTTP Gitea. Each module registered once, before its first tag.</td></tr>
+        <tr><td>Packeton accounts</td><td>The internal token for developers, the bot and CI. One customer group and user per external customer (flow 4).</td></tr>
+        <tr><td>Network</td><td>Gitea, runners and production stay internal. Only Packeton is reachable from the internet; rewrite the internal Gitea URL Packeton shows in its metadata (<code>source.url</code>) in the proxy.</td></tr>
+        <tr><td>Project repos</td><td><code>composer.json</code> points <code>repositories</code> at Packeton, sets <code>preferred-install: dist</code> and <code>allow-plugins</code>. <code>.gitignore</code> for <code>web/sites/default/files/</code> and <code>config/sync/.htaccess</code>; <code>vendor/</code> committed with dev dependencies. Topic <code>activit-project</code> on new Elmont projects only.</td></tr>
+        <tr><td>Developer machines</td><td>Packeton token in Composer's <code>auth.json</code>; with DDEV in <code>~/.ddev/homeadditions/.composer/auth.json</code>. A 401 from Packeton makes Composer silently use its stale cache.</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section>
+  <h2>Verified in the pilot, and still open</h2>
+  <p class="note">The pilot lab ran all of the above against Gitea 28.1, Packeton, a Gitea Actions runner, Composer and DDEV with Drupal 11: an automated end-to-end test, a full manual setup from an empty Gitea, and throwaway instances for every change to <code>ci-tools</code>.</p>
+  <ul class="plain">
+    <li>Verified: the protection rules (no direct pushes, no forced merges of red pull requests, admins included), per-repository webhooks (tags indexed in seconds), the Checks, Upstream (from the locked tag, client patches reversed, no duplicates), the release into the developer's pull request and its fallbacks, update pull requests and their skip rules, <code>/merge</code> and <code>/release</code> with their refusals, forward-ports over two hops, conflicts as issues, the overview comment.</li>
+    <li>Verified: Packeton's archives leave out <code>export-ignore</code> files exactly like <code>git archive</code>; <code>dev-</code> versions of bot branches with slashes install; customer limits (version, update expiration, renewal) behave as flow 4 says, also behind a TLS proxy.</li>
+    <li>Open: the runner image from Gitea's container registry (the lab builds it locally).</li>
+    <li>Open: Packeton on the internet (a public certificate, rate limits, the <code>source.url</code> rewrite).</li>
+    <li>Open: speed and ergonomics on the largest real project, and runner capacity.</li>
+  </ul>
+</section>
+</div>
+
+</body></html>

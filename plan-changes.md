@@ -1,5 +1,11 @@
 # Plan changes from the pilot lab
 
+> **Applied on 14 October 2026.** Every item below, plus findings 37 to 43 (the guided in-place flow, `/merge` and
+> `/release`, forward-port releases, the protection rules), is now part of the plan itself:
+> [`shared-drupal-modules-workflow.md`](shared-drupal-modules-workflow.md), with its diagram
+> [`shared-drupal-modules-workflow.html`](shared-drupal-modules-workflow.html). This file stays as the record of
+> *why* each part of the plan changed.
+
 *For the Elmont call. Maps what the lab found to the sections of [`shared-drupal-modules-workflow.md`](shared-drupal-modules-workflow.md).
 Evidence: finding numbers refer to the numbered list in [`README.md`](README.md); "e2e" means a step of `./lab e2e`
 (about 110 assertions, passed on three complete from-scratch runs; see the README for the one unexplained flake, finding 34).*
