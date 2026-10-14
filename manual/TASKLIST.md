@@ -676,20 +676,32 @@ into a merge request in the module repo.
 
 ## Phase 13 — Optional: external customers in Packeton
 
-*Plan 10.* Customers install from Packeton only, with a grant limited by version and a freeze date. We verified
-this through Packeton's API in the lab; the UI exposes the same objects (**Admin → Groups**, **Admin → Users**).
+*Plan 10.* An external customer ("Unipo") never touches Gitea: they install from Packeton with their own token and
+see only what their contract grants (packages, a version constraint, a freeze date). All in the Packeton UI as
+`admin`: the top menu **Settings** holds **My users** and **My groups**.
 
-- [ ] **13.1** Create a group `unipo` with the package `activit/ait_banners` and version constraint `<2.0`.
-- [ ] **13.2** Create a user `unipo` in that group; optionally set **"Expired updates at"** (the customer is frozen
-  on what was released before that date; ⚠ do **not** confuse it with account expiry, which locks them out).
-  Copy the user's API token.
-- [ ] **13.3** Test from any machine:
+- [ ] **13.1 The customer's group.** *Settings → My groups → **Create group***: **Name** `unipo`; leave **Update
+  expiration** empty; in the package list tick **`activit/ait_banners`** and set its **Version** to `<2.0` (the
+  contract covers the 1.x line). Save. 📸
+- [ ] **13.2 The customer user.** *Settings → My users → **Create user***: **Username** `unipo`, an **Email**,
+  **Enabled** ticked, **Password** empty ("Keep empty for only API access"), **Access expiration date** and **Update
+  expiration date** empty, **Full read access** and **Maintainer** *not* ticked, **ACL Groups** `unipo`. Save. 📸
+  Their API token (what you hand over with the repository URL):
+  `docker compose --project-directory $REPO/ops/bare -f $REPO/ops/bare/docker-compose.yml exec packeton app packagist:user:manager unipo --show-token`
+- [ ] **13.3 Test as the customer** (any machine that reaches Packeton):
   ```bash
   curl -s -u unipo:<token> http://packeton.test/p2/activit/ait_banners.json | jq -r '[.packages[][].version]|join(" ")'
   ```
-  ✅ only versions below 2.0 (and, with the freeze date set, only those released before it). Anonymous: 401.
-- [ ] **13.4 Re-subscribe:** widen the group to all versions and clear the date: the customer now *sees* 2.x, but
-  `composer update` stays on 1.x until their `composer.json` asks for `^2.0` (finding 32).
+  ✅ only `v1.0.0 … v1.1.x` (no 2.x, no `dev-` versions); without credentials HTTP 401; a package outside the
+  grant (`activit/ait_banners_ribbon`) 404. In a customer project (`repositories: [{type: composer, url:
+  http://packeton.test}]`, the token as `http-basic`), `composer require activit/ait_banners` takes the newest 1.x
+  and `…:^2.0` fails.
+- [ ] **13.4 Support ends: freeze.** *My users → `unipo`*: **Update expiration date** = a day (here: the day of the
+  latest releases). ✅ the customer only sees versions released **before** that day and stays on them; the account
+  keeps working. ⚠ Do **not** use **Access expiration date** for this: it locks them out. 📸
+- [ ] **13.5 Renewal with 2.x.** Clear the user's **Update expiration date**; in *My groups → `unipo`* change the
+  **Version** to `*`. ✅ the customer *sees* 2.x, but a project on `^1.1` stays on the newest 1.x with `composer update`
+  ("Nothing to modify in lock file"); only `composer require activit/ait_banners:^2.0` moves it (finding 32). 📸
   ⚠ Finding 16: Packeton's metadata exposes the internal Gitea clone URL; hide it in the proxy in production.
   🧪 `./lab external` (automated lab only) shows the TLS-proxy topology.
 
