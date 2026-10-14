@@ -203,6 +203,9 @@ Update PRs, Checks, protected branches, Packeton grants). 78 assertions:
     `/merge` in the project PR while the module Checks ran ("pending, not green yet"), then merged; hop 1 prompt
     `/release v2.0.2`, released, tag = merge commit; hop 2 opened and traced back to the project PR; `/merge` only,
     then the reminder; `/release v3.0.1` on the merged PR tagged `main`; a conflicting change showed as an issue line.
+    **v1.8.1** (found on the walkthrough instance): the overview never appeared when the project PR was already
+    merged, because Gitea then reports its `head.ref` as `refs/pull/<n>/head`; `origin_of` now also matches
+    `head.label`, which keeps the branch name (the throwaway test had used an open project PR).
 
 ## Fresh-machine replay (verified)
 

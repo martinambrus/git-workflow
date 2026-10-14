@@ -91,3 +91,5 @@ scenarios: a project on 1.x could not send a fix once `main` had moved to 2.0.0)
 | `lib/common.sh` | `origin_of` (project PR behind a module commit, across hops), `overview` (one updatable comment), `latest_tag` (line-aware) |
 | `commands.yml` | now also in the module template |
 
+**v1.8.1:** `origin_of` also finds a merged project PR whose branch was deleted (Gitea reports `head.ref` as
+`refs/pull/<n>/head` then; `head.label` keeps the branch name).

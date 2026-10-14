@@ -67,6 +67,7 @@ is_main_dev() {
 # origin_of REPO SHA -> "org/project#N": the project pull request a module commit came from. Follows the pull request
 # that merged SHA: an Upstream merge request names its project branch (upstream-source marker, or its first line);
 # a forward-port pull request names its source commit (forward-port marker), which is followed again (next hop).
+# A merged pull request whose branch was deleted reports head.ref refs/pull/<n>/head; head.label keeps the branch.
 # Prints nothing when the commit has no such origin (an ordinary module change).
 origin_of() {
   local repo=$1 sha=$2 pr body head src_repo src_branch n i
@@ -77,7 +78,7 @@ origin_of() {
        || [[ $body =~ Sent\ by\ the\ Upstream\ job\ from\ \`([^\`]+)\`\ branch\ \`([^\`]+)\` ]]; then
       src_repo=${BASH_REMATCH[1]}; src_branch=${BASH_REMATCH[2]}
       n=$(api GET "/repos/$src_repo/pulls?state=all&limit=50" 2>/dev/null \
-          | jq -r --arg h "$src_branch" '[.[]|select(.head.ref==$h)]|sort_by(.number)|last|.number // empty')
+          | jq -r --arg h "$src_branch" '[.[]|select(.head.ref==$h or .head.label==$h)]|sort_by(.number)|last|.number // empty')
       [ -n "$n" ] && echo "$src_repo#$n"
       return 0
     elif [[ $body =~ \<\!--\ forward-port:[^:]+:([0-9a-f]{40})\ --\> ]]; then
