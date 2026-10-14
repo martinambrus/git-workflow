@@ -445,7 +445,7 @@ and implements the new hook; only **shop-b** gets it.
 - [ ] **9.1 Create the 1.x line first, then develop 2.0 on `main`:**
   ```bash
   cd $REPO/workspace/ait_banners && git switch main && git pull
-  git branch 1.x v1.1.0 && git push origin 1.x        # allowed: you are on the push whitelist of [0-9]*.x
+  git branch 1.x v1.1.0 && git push -u origin 1.x     # allowed: you are on the push allowlist of [0-9]*.x; -u sets tracking
   git switch -c refactor/2.0
   git apply $REPO/manual/assets/ait_banners-2.0.0-refactor.patch
   git add -A && git commit -m "2.0: rename the alter hook, require Drupal 11"
@@ -507,10 +507,11 @@ and implements the new hook; only **shop-b** gets it.
   git add -A && git commit -m "1.x: slight letter-spacing on the sponsor name"
   git push -u origin fix/sponsor-spacing
   ```
-  Open the PR with **base branch `1.x`** (not `main`). Checks → merge.
+  Open the PR with **base branch `1.x`** (not `main`). ⚠ Gitea's *New Pull Request* page preselects `main` as the
+  base: change the left dropdown to `1.x` and check that the PR shows exactly your one commit. Checks → merge.
 - [ ] **10.2 Tag it on the 1.x branch:**
   ```bash
-  git switch 1.x && git pull && git tag -a v1.1.1 -m "1.1.1" && git push origin v1.1.1
+  git switch 1.x && git branch --set-upstream-to=origin/1.x 1.x && git pull && git tag -a v1.1.1 -m "1.1.1" && git push origin v1.1.1
   ```
   ✅ **Release job → update PR only in shop-a** (`update/ait_banners-1.1.1`): shop-b is on `^2.0`, so it is skipped.
   📸 the one PR and the empty list in shop-b. Merge it. shop-a is now on `v1.1.1`.
