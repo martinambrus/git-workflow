@@ -57,6 +57,16 @@ released_in() {
   git -C "$1" tag --contains "$2" --list "$pat" 2>/dev/null | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | head -1 || true
 }
 
+# package_changed GIT_DIR FROM TO -> true when the package (git archive of the commit, so export-ignore applies: no
+# .gitea/, tests/ ...) differs between FROM and TO. A CI-only change has nothing to release.
+package_changed() {
+  local t rc=0; t=$(mktemp -d); mkdir "$t/a" "$t/b"
+  if git -C "$1" archive "$2" | tar -x -C "$t/a" && git -C "$1" archive "$3" | tar -x -C "$t/b"; then
+    diff -rq "$t/a" "$t/b" >/dev/null && rc=1
+  fi
+  rm -rf "$t"; return $rc
+}
+
 # next_version GIT_DIR REF -> the next patch version after latest_tag (v1.0.0 if none)
 next_version() {
   local latest; latest=$(latest_tag "$1" "$2")

@@ -102,3 +102,6 @@ scenarios: a project on 1.x could not send a fix once `main` had moved to 2.0.0)
 
 **v1.8.4:** the overview comment in the project PR moves to the end of the conversation on every update (posted
 anew, the old copy deleted).
+
+**v1.8.5:** CI-only changes (nothing in the package archive differs, `export-ignore` applied) get no release prompt
+or reminder, and `/release` refuses them (`package_changed`).

@@ -71,6 +71,13 @@ for c in "${commits[@]}"; do
   num=$(api POST "/repos/$REPOSITORY/pulls" "$(jq -n --arg t "Forward-port ($BRANCH -> $target): $subject" --arg b "$body" --arg h "$fb" --arg base "$target" '{title:$t,body:$b,head:$h,base:$base}')" | jq -r .number)
   log "$short: opened ${REPOSITORY}#${num} into $target: ${GITEA_URL}/${REPOSITORY}/pulls/${num}"
   nv=$(next_version . "origin/$target")
+  if ! package_changed . "origin/$target" HEAD; then
+    prompt="<!-- fwd-prompt -->
+This forward-port only changes files that are **not part of the package** (CI workflows, tests: \`export-ignore\`), so there is **nothing to release**. Merge it (reply \`/merge\`, or use the merge button) to keep \`${target}\` in step."
+    api POST "/repos/$REPOSITORY/issues/${num}/comments" "$(jq -n --arg b "$prompt" '{body:$b}')" >/dev/null || warn "#$num: prompt comment failed"
+    overview "$(origin_of "$REPOSITORY" "$c")" "${REPOSITORY}#${num}" "$(fwd_line "$REPOSITORY" "$num" "$BRANCH" "$target" "open (CI-only, nothing to release)")"
+    continue
+  fi
   if ! git cat-file -e "origin/${default}:.gitea/workflows/commands.yml" 2>/dev/null; then
     # Gitea runs comment workflows from the default branch: without commands.yml there, replies do nothing at all
     prompt="<!-- fwd-prompt -->

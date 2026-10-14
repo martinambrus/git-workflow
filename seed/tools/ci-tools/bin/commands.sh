@@ -76,6 +76,10 @@ if [ "${REPOSITORY%%/*}" = "$MODULE_ORG" ]; then
   fi
 
   git -C "$work/m" fetch -q origin
+  if [ -n "${latest:-}" ] && ! package_changed "$work/m" "$latest" "$sha"; then
+    reply "@${user}: $([ "$merged" != true ] && echo "merged into \`${base}\`, but ")nothing to release: since \`${latest}\` only files outside the package changed (CI workflows, tests)."
+    exit 0
+  fi
   if [ -n "${latest:-}" ]; then list=$(git -C "$work/m" log --first-parent --format='- %s (%h)' "${latest}..${sha}" | head -30)
   else list=$(git -C "$work/m" log --first-parent --format='- %s (%h)' -n 15 "$sha"); fi
   list=$(sed -E "s/^- Merge pull request '(.*)' \(#([0-9]+)\) from .* into [^ ]+ \(([0-9a-f]+)\)$/- \1 (#\2, \3)/" <<<"$list")
@@ -139,6 +143,8 @@ if [ -n "$latest" ]; then
   [ "${latest#v}" != "${latest#v${major}.}" ] || { reply "@${user}: \`${line}\` carries \`${latest}\`, not the ${major}.x line: nothing done."; exit 0; }
   [ "$(git -C "$work/m" rev-list -n1 "$latest")" != "$(git -C "$work/m" rev-parse "origin/${line}")" ] \
     || { reply "@${user}: \`${line}\` has nothing new since \`${latest}\`: nothing done."; exit 0; }
+  package_changed "$work/m" "$latest" "origin/${line}" \
+    || { reply "@${user}: nothing to release on \`${line}\`: since \`${latest}\` only files outside the package changed (CI workflows, tests)."; exit 0; }
 fi
 if api POST "/repos/${module}/tags" "$(jq -n --arg t "$version" --arg l "$line" --arg m "${version#v} (released from ${REPOSITORY}#${PR} by ${user})" '{tag_name:$t,target:$l,message:$m}')" >/dev/null; then
   reply "Tagged \`${version}\` on \`${line}\` of ${module} (requested by @${user}). The Release job publishes it and adds it to this pull request; that takes a minute or two."

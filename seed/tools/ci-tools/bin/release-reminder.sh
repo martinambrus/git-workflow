@@ -25,6 +25,12 @@ case $HEAD_REF in
            git -C "$work/m" fetch -q --tags origin
            tag=$(released_in "$work/m" "$sha" "$BASE_REF")    # any release on the line that contains the merge
            [ -n "$tag" ] && break; sleep 5; done
+         git -C "$work/m" fetch -q origin
+         if [ -z "$tag" ] && ! package_changed "$work/m" "${sha}^1" "$sha"; then
+           overview "$origin" "${REPOSITORY}#${PR}" "$(fwd_line "$REPOSITORY" "$PR" "$from" "$BASE_REF" "merged (CI-only, nothing to release)")"
+           log "#$PR: merged; it changes nothing in the package: no release needed"
+           exit 0
+         fi
          if [ -n "$tag" ]; then
            overview "$origin" "${REPOSITORY}#${PR}" "$(fwd_line "$REPOSITORY" "$PR" "$from" "$BASE_REF" "merged, **released as \`${tag}\`**")"
            log "#$PR: merged and released as $tag"
@@ -51,6 +57,9 @@ if api GET "/repos/${REPOSITORY}/issues/${PR}/comments?limit=100" | jq -e --arg 
 
 work=$(mktemp -d)
 git clone -q --branch "$BASE_REF" "${GITEA_URL}/${REPOSITORY}.git" "$work/m" || die "cannot clone ${REPOSITORY}@${BASE_REF}"
+msha=$(api GET "/repos/${REPOSITORY}/pulls/${PR}" | jq -r '.merge_commit_sha // empty')
+if [ -n "$msha" ] && ! package_changed "$work/m" "${msha}^1" "$msha"; then
+  log "#$PR changes nothing in the package (CI-only): no release reminder"; exit 0; fi
 latest=$(latest_tag "$work/m" "origin/${BASE_REF}")
 if [[ $latest =~ ^v([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
   next="v${BASH_REMATCH[1]}.${BASH_REMATCH[2]}.$((BASH_REMATCH[3] + 1))"
