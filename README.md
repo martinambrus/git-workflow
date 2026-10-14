@@ -451,6 +451,9 @@ moving the date forward restored everything (the freeze of plan section 10).
     `packagist:update <pkg> --delete-before`. `./lab prune` deletes branches without an open PR in all repos and runs
     that update for registered packages (the effect shows after a few seconds). Repos are also set to "delete branch
     after merge" by default, but merges through the API must pass `delete_branch_after_merge`.
+    `./lab prune` (fixed 2026-10-14) never deletes release lines (`1.x`, `2.x`, …): it used to spare only the default
+    branch. On the manual instance the stale versions were removed with `app packagist:update <pkg> --delete-before`
+    (as `www-data` in the Packeton container): 33 + 8 `dev-` versions gone, releases, `dev-main` and `1.x-dev` kept.
 19. Packeton lists pre-release tags (`v1.2.0-rc.1`) in its stable metadata; customers only get them when their
     `minimum-stability` allows it. The Release job opens no update PRs for them.
 20. Not verified (cannot be locally): real internet exposure, a publicly trusted certificate, rate limits.

@@ -7,7 +7,8 @@ set -euo pipefail
 for repo in $(api GET "/orgs/$SITE_ORG/repos?limit=100" | jq -r '.[].full_name') $(api GET "/orgs/$MODULE_ORG/repos?limit=100" | jq -r '.[].full_name'); do
   open=$(api GET "/repos/$repo/pulls?state=open&limit=100" | jq -r '[.[].head.ref]|join(" ")')
   def=$(api GET "/repos/$repo" | jq -r .default_branch)
-  for b in $(api GET "/repos/$repo/branches?limit=100" | jq -r --arg d "$def" '.[].name|select(.!=$d)'); do
+  # never the default branch, never a release line (1.x, 2.x, 1.2.x ...): only short-lived branches
+  for b in $(api GET "/repos/$repo/branches?limit=100" | jq -r --arg d "$def" '.[].name|select(.!=$d)|select(test("^[0-9]+(\\.[0-9]+)*\\.x$")|not)'); do
     case " $open " in *" $b "*) echo "keep    $repo:$b (open PR)";; *)
       api DELETE "/repos/$repo/branches/$(printf '%s' "$b" | jq -sRr @uri)" >/dev/null; echo "deleted $repo:$b";; esac
   done
