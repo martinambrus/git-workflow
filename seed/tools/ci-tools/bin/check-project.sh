@@ -99,7 +99,7 @@ if [ -f composer.lock ] && [ -f vendor/composer/installed.json ]; then
       if [ $isown = 1 ]; then n_own=$((n_own+1)); own_list="$own_list $c"; else n_other=$((n_other+1)); other_list="$other_list $c"; fi
     done <<<"$changed"
     [ $n_own -gt 0 ]   && soft "drift in our own modules ($n_own files, unreleased in-place work?):$(echo "$own_list" | tr ' ' '\n' | head -8 | sed 's/^/ /')"
-    [ $n_own -gt 0 ] && [ $strict = 1 ] && log "This is expected for an in-place module change: do not merge. The Upstream job sent it to the module repository (see its comment on the pull request); it comes back as a release with an update pull request, which closes this one."
+    [ $n_own -gt 0 ] && [ $strict = 1 ] && log "This is expected for an in-place module change: do not merge. The Upstream job sent it to the module repository (see its comment on the pull request); once it is released, the Release job adds the release to this pull request and the check passes."
     [ $n_other -gt 0 ] && fail "drift in third-party/vendor code ($n_other files):$(echo "$other_list" | tr ' ' '\n' | head -8 | sed 's/^/ /')"
   fi
 

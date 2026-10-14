@@ -151,6 +151,23 @@ Update PRs, Checks, protected branches, Packeton grants). 78 assertions:
     release line, not in the locked tag. Existing setups: tag ci-tools `v1.5.0`, copy `upstream.yml` + `checks.yml`
     into each project and `release.yml` + `release-reminder.yml` onto each module's `main` and `<N>.x` (via PRs).
 
+39. **The developer's PR should become mergeable itself** (manual walkthrough, 12.4: PR #10 and the update PR #11 were
+    "the same thing"), and opening the project PR after its module MR was merged opened a **second** MR for the same
+    change. ci-tools **v1.6.0**: when exactly one open project PR carries the Upstream marker for the module and its
+    own module diff is contained in the release, `update-prs.sh` runs `composer update <module>` **on that branch** and
+    pushes one commit (never forced); the PR's Checks turn green and the developer merges it. Fallback to a separate
+    update PR (with the v1.5.0 close/comment logic) when several PRs change the module, the push is rejected (branch
+    moved or protected), the change is not fully released, or the branch's constraint does not allow the version.
+    After the push the job waits for Gitea's mergeability; on a conflict with `main` it comments the fix (take main's
+    version of each conflicted Composer file, `composer update <module>`, commit, push), which was verified: the
+    conflicts are in `vendor/composer/installed.php` and `vendor/drupal/DrupalInstalled.php`, not in the lock. The
+    Upstream job checks whether the target line already contains the change (the patch reverse-applies to it) and
+    then comments "already merged, not released yet" instead of opening a merge request. Also verified: with
+    *Enable Status Check* a red PR cannot be merged, but a repo admin can still force-merge it unless the rule has
+    **Administrators must follow branch protection rules** (`block_admin_merge_override`); the lab sets it now (the old
+    `apply_to_admins` field does not exist in Gitea 28.1). All on a throwaway Gitea 28.1 + Packeton + act_runner with
+    a team-member bot, in four rounds: in place (+ no duplicate MR), push rejected, two PRs, conflict with `main`.
+
 ## Fresh-machine replay (verified)
 
 Done from a plain `git clone` of this repository on a machine that had been wiped of every lab container, volume,
@@ -289,9 +306,11 @@ each module folder with `git archive` of its locked tag, and if they differ push
 `up/<project>/<branch>` in the module repo, opens or updates the merge request (target `<major>.x` if that branch
 exists, else `main`), and comments the link once on the project's pull request. It also runs when a project pull request is opened (the
 first push of a branch comes before its PR), and a concurrency group per branch queues the push run and the PR run.
-Since ci-tools v1.5.0 the comment tells the developer not to merge the project PR and what happens next; a merged
-Upstream merge request gets a release reminder (`release-reminder.yml`, next version + how to tag), and the Release
-job's Update PRs step closes project PRs whose module change the release contains (finding 38). The integrity check (module branch ==
+Since ci-tools v1.5.0 the comment tells the developer not to merge the project PR yet and what happens next, and a
+merged Upstream merge request gets a release reminder (`release-reminder.yml`, next version + how to tag) (finding 38).
+Since v1.6.0 the Release job adds the release **to the developer's own PR** (one `composer update` commit on its
+branch), which then turns green and is merged; it falls back to a separate update PR when that is not safe, and the
+Upstream job opens no second merge request for a change that is already merged but not released (finding 39). The integrity check (module branch ==
 project folder) runs **before** the push. Re-running is safe.
 
 Verified here: `shop-a` branch `feature/promo-banner` (in-place edit of `ait_banners` locked to `v1.0.1`) produced

@@ -224,19 +224,15 @@ if [ -n "$fp" ]; then
 fi
 tag_release "$PBASE" 1.x v1.0.2 && wait_for 180 "v1.0.2 indexed" pk_has "$PBASE" v1.0.2 && ok "v1.0.2 tagged on the 1.x branch and indexed" || die "cannot release v1.0.2"
 c=$(release_result "$PBASE" v1.0.2); [ "$c" = success ] && ok "Release job for v1.0.2 finished: $c" || bad "Release job for v1.0.2: $c"
-wait_for 300 "update PR in $P_OLD" bash -c ". '$LAB_ROOT/ops/bin/lib.sh'; [ -n \"\$(api GET '/repos/$SITE_ORG/$P_OLD/pulls?state=open&limit=50' | jq -r '.[]|select(.head.ref==\"update/$BASE-1.0.2\")|.number')\" ]" \
-  && ok "$P_OLD received update/$BASE-1.0.2" || bad "no 1.0.2 update PR in $P_OLD"
+wait_for 300 "1.0.2 added to $P_OLD#$ppr" bash -c ". '$LAB_ROOT/ops/bin/lib.sh'; api GET '/repos/$SITE_ORG/$P_OLD/issues/$ppr/comments' | grep -q 'updated-in-place:$PBASE:1.0.2'" \
+  && ok "$P_OLD: v1.0.2 was added to the developer's PR #$ppr (in place)" || bad "v1.0.2 was not added to $P_OLD#$ppr"
+pr_exists "$SITE_ORG/$P_OLD" "update/$BASE-1.0.2" && bad "$P_OLD got a separate update PR as well" || ok "$P_OLD: no separate update PR"
 for p in "$P_EXP" "$P_NEW" "$P_PIN"; do
   pr_exists "$SITE_ORG/$p" "update/$BASE-1.0.2" && bad "$p got an update PR for 1.0.2" || ok "$p: no update PR for 1.0.2 ($(case $p in *exp) echo support expired;; *new) echo on 2.0;; *pin) echo pinned;; esac))"
 done
-n=$(open_pr_number "$SITE_ORG/$P_OLD" "update/$BASE-1.0.2")
-if [ -n "$ppr" ]; then
-  [ "$(api GET "/repos/$SITE_ORG/$P_OLD/pulls/$ppr" | jq -r '.state')" = closed ] && comments_of "$SITE_ORG/$P_OLD" "$ppr" | grep -q "Superseded by #$n" \
-    && ok "project PR #$ppr closed automatically: superseded by update PR #$n" || bad "project PR #$ppr not closed as superseded"
-  [ "$(http_code GET "/repos/$SITE_ORG/$P_OLD/branches/fix%2F1x-$ts")" = 404 ] && ok "its branch fix/1x-$ts was deleted" || bad "branch fix/1x-$ts still exists"
-fi
+n=$ppr
 if [ -n "$n" ]; then
-  wait_for 1200 "Checks on update PR" is_success "$SITE_ORG/$P_OLD" "update/$BASE-1.0.2" && ok "$P_OLD#$n: Checks green" || bad "$P_OLD#$n: Checks not green"
+  wait_for 1200 "Checks on $P_OLD#$n" is_success "$SITE_ORG/$P_OLD" "fix/1x-$ts" && ok "$P_OLD#$n: Checks green after the update" || bad "$P_OLD#$n: Checks not green"
   merge_pr "$SITE_ORG/$P_OLD" "$n" && ok "$P_OLD#$n merged" || bad "$P_OLD#$n merge refused"
   [ "$(lock_version "$SITE_ORG/$P_OLD" "$PBASE")" = v1.0.2 ] && ok "$P_OLD is on v1.0.2" || bad "$P_OLD lock: $(lock_version "$SITE_ORG/$P_OLD" "$PBASE")"
 fi

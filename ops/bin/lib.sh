@@ -115,12 +115,13 @@ ddev_composer_auth() { load_secrets
 }
 
 # ensure_main_protection ORG NAME -> plan 2.1: main takes merge requests only, and the Checks job must pass.
-# Applies to admins too (otherwise the main dev could push straight to main).
+# Applies to admins too: no direct push, and no force-merge of a red PR (block_admin_merge_override; Gitea's
+# old apply_to_admins field does not exist in 28.1).
 ensure_main_protection() { local org=$1 name=$2
   # An empty repo has no main yet and its first commit must be pushable: protect once main exists
   # (new-drupal-project.sh calls this after the initial push; ./lab sync re-applies it).
   [ "$(http_code GET "/repos/$org/$name/branches/main")" = 200 ] || { echo "   (no main branch yet: protection applied after the first push)"; return 0; }
-  local body='{"rule_name":"main","enable_push":false,"enable_status_check":true,"status_check_contexts":["checks / checks (pull_request)"],"required_approvals":0,"apply_to_admins":true}'
+  local body='{"rule_name":"main","enable_push":false,"enable_status_check":true,"status_check_contexts":["checks / checks (pull_request)"],"required_approvals":0,"block_admin_merge_override":true}'
   if [ "$(http_code GET "/repos/$org/$name/branch_protections/main")" = 200 ]; then
     api PATCH "/repos/$org/$name/branch_protections/main" "$body" >/dev/null
   else
@@ -135,7 +136,7 @@ ensure_main_protection() { local org=$1 name=$2
 # including developers and the bot, can only change a release line through a pull request with Checks.
 ensure_release_line_protection() { local org=$1 name=$2 rule='[0-9]*.x'
   local body; body=$(jq -n --arg u "$ADMIN" '{rule_name:"[0-9]*.x",enable_push:true,enable_push_whitelist:true,push_whitelist_usernames:[$u],
-      enable_status_check:true,status_check_contexts:["checks / checks (pull_request)"],required_approvals:0}')
+      enable_status_check:true,status_check_contexts:["checks / checks (pull_request)"],required_approvals:0,block_admin_merge_override:true}')
   local enc; enc=$(printf '%s' "$rule" | jq -sRr @uri)
   if [ "$(http_code GET "/repos/$org/$name/branch_protections/$enc")" = 200 ]; then
     api PATCH "/repos/$org/$name/branch_protections/$enc" "$body" >/dev/null

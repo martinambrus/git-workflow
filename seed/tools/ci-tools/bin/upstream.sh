@@ -91,55 +91,76 @@ for entry in "${mods[@]}"; do
   major=${version#v}; major=${major%%.*}
   if git -C "$mod" ls-remote --exit-code --heads origin "${major}.x" >/dev/null 2>&1; then target="${major}.x"; else target=main; fi
 
-  # one cumulative commit on a branch cut from the locked tag
-  msg=$(git log --format='- %s (%an)' "$base_ref"..HEAD -- "$path" || true)
-  git -C "$mod" switch -q -c "$bot_branch" "refs/tags/$version"   # cut from the LOCKED release, never from a moved main/1.x
-  git -C "$mod" apply --index "$work/changes.patch"
-  bot_git -C "$mod" commit -q -m "Changes from project ${project} (${BRANCH})" -m "$msg"
-
-  # integrity: the module branch must reproduce the project folder exactly (checked BEFORE pushing)
-  chk="$work/chk"; mkdir "$chk"; git -C "$mod" archive HEAD | tar -x -C "$chk"
-  if ! diff -rq "$chk" "$cand" >/dev/null; then
-    warn "integrity check failed for $name: module branch differs from project folder"; diff -rq "$chk" "$cand" | sed 's/^/    /' || true
-    rc=1; echo "::endgroup::"; continue
-  fi
-  log "integrity OK: module branch == project folder (client patches reversed)"
-
-  git -C "$mod" push -q --force origin "$bot_branch"
-  log "pushed ${MODULE_ORG}/${short}:${bot_branch} (cut from $version, target $target)"
-
-  # --- merge request in the module repo ---------------------------------------------------------------------
-  title="Changes from ${project}: ${BRANCH}"
-  body=$(printf '<!-- upstream-source: %s %s -->\nSent by the Upstream job from `%s` branch `%s` (locked to `%s`).\n\nProject commits touching `%s`:\n\n%s\n\nThe branch is rebuilt on every push of the project branch. Do not commit to it by hand.\nAfter merging, tag the next release on `%s`: the project then gets an update pull request.\n' \
-         "$REPOSITORY" "$BRANCH" "$REPOSITORY" "$BRANCH" "$version" "$path" "$msg" "$target")
   existing=$(api GET "/repos/${MODULE_ORG}/${short}/pulls?state=open&limit=50" | jq -r --arg h "$bot_branch" '.[]|select(.head.ref==$h)|.number' | head -1)
-  if [ -n "$existing" ]; then
-    api PATCH "/repos/${MODULE_ORG}/${short}/pulls/${existing}" "$(jq -n --arg t "$title" --arg b "$body" '{title:$t,body:$b}')" >/dev/null
-    mr=$existing; log "updated merge request ${MODULE_ORG}/${short}#${mr}"
-  else
-    mr=$(api POST "/repos/${MODULE_ORG}/${short}/pulls" "$(jq -n --arg t "$title" --arg b "$body" --arg h "$bot_branch" --arg base "$target" \
-         '{title:$t,body:$b,head:$h,base:$base}')" | jq -r .number)
-    log "opened merge request ${MODULE_ORG}/${short}#${mr}"
+
+  # Already merged into the target line (but not released yet)? Then a new merge request would only duplicate it:
+  # e.g. the project PR is opened, or the branch pushed again, after the module merge request was merged.
+  merged_already=0
+  if [ -z "$existing" ]; then
+    tgt="$work/tgt"; mkdir "$tgt"; git -C "$mod" archive "origin/$target" | tar -x -C "$tgt"
+    if ( cd "$tgt" && git apply -R --check "$work/changes.patch" ) 2>/dev/null; then merged_already=1; fi
   fi
-  mr_url="${GITEA_URL}/${MODULE_ORG}/${short}/pulls/${mr}"
+
+  if [ $merged_already = 1 ]; then
+    log "the change is already on ${MODULE_ORG}/${short}:${target} (merged, not released yet): no merge request"
+    mr_url=""
+  else
+    # one cumulative commit on a branch cut from the locked tag
+    msg=$(git log --format='- %s (%an)' "$base_ref"..HEAD -- "$path" || true)
+    git -C "$mod" switch -q -c "$bot_branch" "refs/tags/$version"   # cut from the LOCKED release, never from a moved main/1.x
+    git -C "$mod" apply --index "$work/changes.patch"
+    bot_git -C "$mod" commit -q -m "Changes from project ${project} (${BRANCH})" -m "$msg"
+
+    # integrity: the module branch must reproduce the project folder exactly (checked BEFORE pushing)
+    chk="$work/chk"; mkdir "$chk"; git -C "$mod" archive HEAD | tar -x -C "$chk"
+    if ! diff -rq "$chk" "$cand" >/dev/null; then
+      warn "integrity check failed for $name: module branch differs from project folder"; diff -rq "$chk" "$cand" | sed 's/^/    /' || true
+      rc=1; echo "::endgroup::"; continue
+    fi
+    log "integrity OK: module branch == project folder (client patches reversed)"
+
+    git -C "$mod" push -q --force origin "$bot_branch"
+    log "pushed ${MODULE_ORG}/${short}:${bot_branch} (cut from $version, target $target)"
+
+    # --- merge request in the module repo -------------------------------------------------------------------
+    title="Changes from ${project}: ${BRANCH}"
+    body=$(printf '<!-- upstream-source: %s %s -->\nSent by the Upstream job from `%s` branch `%s` (locked to `%s`).\n\nProject commits touching `%s`:\n\n%s\n\nThe branch is rebuilt on every push of the project branch. Do not commit to it by hand.\nAfter merging, tag the next release on `%s`: the Release job then adds it to the project pull request.\n' \
+           "$REPOSITORY" "$BRANCH" "$REPOSITORY" "$BRANCH" "$version" "$path" "$msg" "$target")
+    if [ -n "$existing" ]; then
+      api PATCH "/repos/${MODULE_ORG}/${short}/pulls/${existing}" "$(jq -n --arg t "$title" --arg b "$body" '{title:$t,body:$b}')" >/dev/null
+      mr=$existing; log "updated merge request ${MODULE_ORG}/${short}#${mr}"
+    else
+      mr=$(api POST "/repos/${MODULE_ORG}/${short}/pulls" "$(jq -n --arg t "$title" --arg b "$body" --arg h "$bot_branch" --arg base "$target" \
+           '{title:$t,body:$b,head:$h,base:$base}')" | jq -r .number)
+      log "opened merge request ${MODULE_ORG}/${short}#${mr}"
+    fi
+    mr_url="${GITEA_URL}/${MODULE_ORG}/${short}/pulls/${mr}"
+  fi
 
   # --- comment on the project's own pull request (once per module) --------------------------------------------
   pr=$(api GET "/repos/${REPOSITORY}/pulls?state=open&limit=50" | jq -r --arg h "$BRANCH" '.[]|select(.head.ref==$h)|.number' | head -1 || true)
   if [ -n "${pr:-}" ]; then
     marker="<!-- upstream:${name} -->"
-    if api GET "/repos/${REPOSITORY}/issues/${pr}/comments" | jq -e --arg m "$marker" '.[]|select(.body|contains($m))' >/dev/null; then
-      log "project pull request #${pr} already links the merge request"
+    if api GET "/repos/${REPOSITORY}/issues/${pr}/comments?limit=100" | jq -e --arg m "$marker" '.[]|select(.body|contains($m))' >/dev/null; then
+      log "project pull request #${pr} already has the Upstream comment"
     else
+      if [ -n "$mr_url" ]; then
+        head_line="**Do not merge this pull request yet.** It changes the shared module \`${name}\`, so the Upstream job sent the change to the module repository as ${mr_url} (target \`${target}\`). Until that change is released, the Checks of this pull request fail on purpose: unreleased module code never reaches \`main\`."
+        steps="1. A main dev reviews and merges ${mr_url}. Every further push to this branch updates it.
+2. A main dev tags the next release on \`${target}\`."; nxt=3
+      else
+        head_line="**Do not merge this pull request yet.** Its change to the shared module \`${name}\` is already merged into the module's \`${target}\` branch, but not released yet. Until it is released, the Checks of this pull request fail on purpose: unreleased module code never reaches \`main\`."
+        steps="1. A main dev tags the next release on \`${target}\`."; nxt=2
+      fi
       note=$(cat <<NOTE
 ${marker}
-**Do not merge this pull request.** It changes the shared module \`${name}\`, so the Upstream job sent the change to the module repository as ${mr_url} (target \`${target}\`). The Checks of this pull request fail on purpose: unreleased module code never reaches \`main\`.
+${head_line}
 
 What happens next (nothing to do for you unless the review asks for changes):
-1. A main dev reviews and merges ${mr_url}. Every further push to this branch updates it.
-2. A main dev tags the next release on \`${target}\`.
-3. The Release job opens an update pull request here. It brings your change back as a release, and **this pull request is then closed automatically**.
+${steps}
+${nxt}. The Release job then adds the release to **this** pull request (one commit by the bot: \`composer update ${name}\`). Its Checks turn green and you merge it as usual. Run \`git pull\` before you push to this branch again.
 
-If this pull request also changes files outside \`${path}\`, it is not closed: merge the update pull request first, then merge \`main\` into this branch; the module part disappears and the rest is reviewed and merged as usual.
+If several open pull requests in this project change \`${name}\`, or this branch moved when the release came, the Release job opens a separate update pull request instead and says here what to do.
 NOTE
 )
       api POST "/repos/${REPOSITORY}/issues/${pr}/comments" "$(jq -n --arg b "$note" '{body:$b}')" >/dev/null

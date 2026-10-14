@@ -102,19 +102,21 @@ git clone -q --depth 1 "http://$ADMIN:$ADMIN_PW@$GITEA_HOST:3000/$MODULE_ORG/ait
   && git -C "$tmp/m" -c user.name="Main Dev" -c user.email=admin@example.test tag -a "v$next" -m "e2e release $next" \
   && git -C "$tmp/m" push -q origin "v$next" 2>/dev/null && ok "tagged v$next as the main dev" || die "could not tag"
 rm -rf "$tmp"
-git -C "$A" branch -D "$branch" >/dev/null 2>&1   # the remote branch is deleted by the Release job (superseded PR)
+git -C "$A" branch -D "$branch" >/dev/null 2>&1
 
 upd="update/ait_banners-$next"
-for r in sites/shop-a sites/shop-b; do
-  wait_for 600 "update PR in $r" bash -c ". '$LAB_ROOT/ops/bin/lib.sh'; [ -n \"\$(api GET '/repos/$r/pulls?state=open&limit=50' | jq -r '.[]|select(.head.ref==\"$upd\")|.number')\" ]" \
-    && ok "Release job opened $upd in $r" || bad "no update PR in $r"
-done
-n=$(open_pr_number sites/shop-a "$upd")
-[ "$(api GET "/repos/sites/shop-a/pulls/$ppr" | jq -r .state)" = closed ] && api GET "/repos/sites/shop-a/issues/$ppr/comments" | grep -q "Superseded by #$n" \
-  && ok "project PR #$ppr closed automatically: superseded by update PR #$n" || bad "project PR #$ppr not closed as superseded"
-[ "$(http_code GET "/repos/sites/shop-a/branches/$(printf '%s' "$branch" | jq -sRr @uri)")" = 404 ] && ok "its branch $branch was deleted" \
-  || { bad "branch $branch still exists"; git -C "$A" push -q origin --delete "$branch" 2>/dev/null; }
-for r in sites/shop-a sites/shop-b; do
+# shop-a: the release is added to the developer's own PR (one bot commit), no separate update PR
+wait_for 600 "release added to shop-a#$ppr" bash -c ". '$LAB_ROOT/ops/bin/lib.sh'; api GET '/repos/sites/shop-a/issues/$ppr/comments' | grep -q 'updated-in-place:$MODULE_ORG/ait_banners:$next'" \
+  && ok "Release job added v$next to the project PR #$ppr (in place)" || bad "v$next was not added to project PR #$ppr"
+api GET "/repos/sites/shop-a/pulls/$ppr/commits" | jq -r '.[].commit.message' | grep -q "Update $MODULE_ORG/ait_banners to $next" \
+  && ok "PR #$ppr has the bot's commit 'Update $MODULE_ORG/ait_banners to $next'" || bad "PR #$ppr has no update commit"
+[ -z "$(open_pr_number sites/shop-a "$upd")" ] && ok "no separate update PR in shop-a" || bad "shop-a got a separate update PR as well"
+wait_for 1200 "Checks on shop-a#$ppr" is_success sites/shop-a "$branch" && ok "shop-a#$ppr: Checks green after the update" || bad "shop-a#$ppr: Checks not green ($(pr_status sites/shop-a "$branch"))"
+merge_pr sites/shop-a "$ppr" && ok "shop-a#$ppr (the developer's own PR) merged" || bad "shop-a#$ppr merge refused"
+# shop-b did not make the change: a normal update PR
+wait_for 600 "update PR in shop-b" bash -c ". '$LAB_ROOT/ops/bin/lib.sh'; [ -n \"\$(api GET '/repos/sites/shop-b/pulls?state=open&limit=50' | jq -r '.[]|select(.head.ref==\"$upd\")|.number')\" ]" \
+  && ok "Release job opened $upd in sites/shop-b" || bad "no update PR in sites/shop-b"
+for r in sites/shop-b; do
   n=$(open_pr_number "$r" "$upd"); [ -n "$n" ] || continue
   author=$(api GET "/repos/$r/pulls/$n" | jq -r .user.login)
   [ "$author" = bot ] && ok "$r#$n was authored by bot" || bad "$r#$n author is '$author'"

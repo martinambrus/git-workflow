@@ -192,16 +192,16 @@ containing `dev` and `bot`; you hold a `BOT_TOKEN`.
   cp -a $REPO/seed/tools/ci-tools/. ci-tools/ && cd ci-tools
   git add -A && git commit -m "ci-tools: upstream, release, update-prs, checks, forward-port"
   git branch -M main && git push -u origin main
-  for t in v1.0.0 v1.1.0 v1.2.0 v1.3.0 v1.3.1 v1.4.0 v1.5.0; do git tag -a $t -m "ci-tools $t"; done
+  for t in v1.0.0 v1.1.0 v1.2.0 v1.3.0 v1.3.1 v1.4.0 v1.5.0 v1.6.0; do git tag -a $t -m "ci-tools $t"; done
   git push origin --tags
   ```
   ✅ the repo shows `bin/upstream.sh`, `bin/release.sh`, `bin/update-prs.sh`, `bin/check-project.sh`,
-  `bin/check-module.sh`, `bin/forward-port.sh`, `bin/release-reminder.sh`, and seven tags. 📸
-  *Why seven tags:* a tag is never moved; the workflow stubs pin `v1.2.0` (module checks), `v1.4.0` (forward-port)
-  and `v1.5.0` (project checks, upstream, release, release reminder); the older tags are history. In your own setup
+  `bin/check-module.sh`, `bin/forward-port.sh`, `bin/release-reminder.sh`, and eight tags. 📸
+  *Why eight tags:* a tag is never moved; the workflow stubs pin `v1.2.0` (module checks), `v1.4.0` (forward-port)
+  and `v1.6.0` (project checks, upstream, release, release reminder); the older tags are history. In your own setup
   you would publish real versions.
 
-**Done when:** `git ls-remote --tags http://gitea.test:3000/activit/ci-tools.git` lists the seven tags.
+**Done when:** `git ls-remote --tags http://gitea.test:3000/activit/ci-tools.git` lists the eight tags.
 
 ---
 
@@ -253,8 +253,9 @@ key, and name `activit/<repo>`.
   ⚠ The target defaults to `main`: a 1.x patch tagged without switching to `1.x` releases the 2.x code as `1.1.x`.
   Only `admin` can create `v*` tags here too (5.2).
 - [ ] **5.5 Branch rules** (repo → *Settings → Branches → Add new rule*):
-  1. pattern `main`: **Disable Push**, **Enable Status Check** with the status check pattern `checks / checks (pull_request)`.
-  2. pattern `[0-9]*.x` (matches `1.x`, `2.x`, not `feat.x`): same status check, but under *Push* choose
+  1. pattern `main`: **Disable Push**, **Enable Status Check** with the status check pattern `checks / checks (pull_request)`,
+     and tick **Administrators must follow branch protection rules** (otherwise an admin can still force-merge a red PR).
+  2. pattern `[0-9]*.x` (matches `1.x`, `2.x`, not `feat.x`): same status check and admin setting, but under *Push* choose
      **Allowlist Restricted Push** and add `admin` under **Allowlisted users for pushing** (creating a release line is a
      push; only the main dev may do it). 📸 both rules
      ⚠ The status name only exists after the first run of the checks workflow (5.6); typing it into the rule is fine.
@@ -361,7 +362,8 @@ push to `main` is refused; a `dev` user cannot push a `v*` tag.
   (finding 28). 🧪 The push is large (25k+ files): that is expected.
 - [ ] **6.6 Topic, protect `main`, delete merged branches**, all **after** the first push (finding 24/25): add the topic
   `activit-project` (**Manage Topics** on the repo home, unless you set it through the API in 6.1); branch rule `main`
-  as in 5.5 (**Disable Push**, **Enable Status Check**, pattern `checks / checks (pull_request)`); *Settings → Repository
+  as in 5.5 (**Disable Push**, **Enable Status Check**, pattern `checks / checks (pull_request)`, **Administrators must
+  follow branch protection rules**: nobody, not even an admin, can merge a red PR); *Settings → Repository
   → Pull Requests*: **Delete pull request branch after merge by default**.
   The first push also triggers *Upstream* and *Checks* runs on the push event. 📸 the Actions tab.
 
@@ -617,10 +619,13 @@ into a merge request in the module repo.
   - the *Upstream* run (it runs on the push **and** when the PR is opened) opened a merge request in
     `activit/ait_banners` from `up/shop-a/fix-banner-css` (slashes become dashes) into **`1.x`**: shop-a is locked to
     a 1.x release and the branch `1.x` exists;
-  - the project PR has **one** comment from `bot`: "**Do not merge this pull request** … What happens next: 1. a main
-    dev merges the module MR 2. tags the next release 3. the Release job opens an update PR here and closes this one";
+  - the project PR has **one** comment from `bot`: "**Do not merge this pull request yet** … What happens next: 1. a
+    main dev merges the module MR 2. tags the next release 3. the Release job adds the release to **this** pull
+    request; its Checks turn green and you merge it" (if the module MR was already merged when the PR was opened, the
+    comment says so and opens no second MR);
   - the project PR's Checks are **red** on purpose: "drift in our own modules … This is expected for an in-place
-    module change: do not merge" (plan 6.6). 📸 the comment and the red check.
+    module change: do not merge" (plan 6.6). The merge button refuses it, for admins too (5.5/6.6). 📸 the comment and
+    the red check.
 - [ ] **12.3 The main dev merges the module MR** (`activit/ait_banners` → the `up/shop-a/...` PR → Checks → merge).
   Gitea may say "This branch is out-of-date with the base branch" and offer *Update branch by merge*: ignore it and
   merge. The bot branch is cut from the release the project is locked to, never from the moving `1.x`; a commit added
@@ -629,17 +634,23 @@ into a merge request in the module repo.
   main dev resolves it like any conflict, or tags the earlier change first so the project updates and re-sends.
   ✅ The *release-reminder* run comments on the merged MR: "Merged into `1.x`, **not released yet** (latest release
   on this line: `v1.1.x`) … tag **`v1.1.y`** on `1.x`", with the command line and the web-UI steps; and the project
-  PR gets "Your module change was merged … waits for a main dev to tag the release". 📸 both comments.
+  PR gets "Your module change was merged … the Release job then adds it to this pull request". 📸 both comments.
   The Forward-port job opens its `fwd/1.x/...` PR into `main` as usual: merge it.
-- [ ] **12.4 Tag the suggested version on `1.x`** (as in 10.2, or in the web UI as in 5.4b). ✅ The Release job opens
-  shop-a's update PR **and closes the project PR** with "Superseded by #N: release `v1.1.y` … contains this change",
-  deleting its branch (*Restore branch* on the PR page brings it back). 📸 the closed PR. Merge the update PR: the
-  loop is closed, shop-a's module folder equals the release again (its Checks are green).
-  - If the project PR also changed files outside the module folder, it is **not** closed; the comment says to merge
-    the update PR, then merge `main` into the branch (the module part disappears). If it contains module changes
-    the release does not have (pushed after the MR was merged), it stays open and says so.
+- [ ] **12.4 Tag the suggested version on `1.x`** (as in 10.2, or in the web UI as in 5.4b). ✅ The Release job adds
+  the release **to the project PR**: one commit by the bot, "Update activit/ait_banners to 1.1.y" (`composer update` on
+  that branch), and a comment "**Release `v1.1.y` … is now in this pull request** … review and merge" with the 9.3/9.4
+  checklist. shop-a gets **no** separate update PR; other projects on 1.x do. The PR's Checks turn **green**: merge
+  it. 📸 the bot commit, the comment, the green PR. Then `git pull` locally (the bot added a commit).
+  The Release job falls back to a separate update PR `update/ait_banners-1.1.y` (and comments on the project PR) when:
+  - **two or more** open PRs in the project change the module: each one whose change is in the release and that
+    changes nothing else is **closed** as "Superseded by #N" and its branch deleted (*Restore branch* undoes it);
+  - the bot **cannot push** to the branch (the developer pushed meanwhile; never forced): merge the update PR, then
+    merge `main` into the branch;
+  - the PR's module change is **not (fully) released** (pushed after the MR was merged): it stays open.
+  If the PR conflicts with `main` after the update (`main` changed `composer.lock` meanwhile), the bot comments the
+  exact commands to fix it (take main's version of the conflicted Composer files, `composer update <module>`).
   ⚠ Never commit to an `up/...` branch by hand: it is rebuilt on every push of the project branch.
-  ⚠ Projects and modules set up before ci-tools `v1.5.0` (README findings 37, 38) need the new workflow files first:
+  ⚠ Projects and modules set up before ci-tools `v1.6.0` (README findings 37–39) need the new workflow files first:
   `upstream.yml` + `checks.yml` in the project, `release.yml` + `release-reminder.yml` on the module's release lines.
 
 ---
@@ -676,7 +687,7 @@ The workflow stubs in `seed/` contain these literally. Use them, or edit the stu
 | Users | `admin` (main dev: tags, release lines), `dev`, `bot` (automation) |
 | Org secrets (both orgs) | `BOT_TOKEN`, `PACKETON_TOKEN` |
 | Runner label | `activit-runner` |
-| ci-tools tags | `v1.2.0` module checks, `v1.4.0` forward-port, `v1.5.0` project checks + upstream + release + release reminder |
+| ci-tools tags | `v1.2.0` module checks, `v1.4.0` forward-port, `v1.6.0` project checks + upstream + release + release reminder |
 | Status check required on `main` and `[0-9]*.x` | `checks / checks (pull_request)` |
 | Opt-in topic for update PRs | `activit-project` |
 | Default branch | `main` |
@@ -688,8 +699,8 @@ For every module repo (`ait_banners`, `ait_banners_ribbon`, ...):
 - [ ] repo in `activit`, Private; default branch `main`
 - [ ] seeded with the module files **and** `seed/module-template/.gitea` (checks, release, forward-port, release-reminder workflows)
 - [ ] protected tag pattern `v*`, allowed user `admin`
-- [ ] branch rule `main` (disable push; status `checks / checks (pull_request)`)
-- [ ] branch rule `[0-9]*.x` (push whitelist `admin`; same status check)
+- [ ] branch rule `main` (disable push; status `checks / checks (pull_request)`; administrators must follow the rules)
+- [ ] branch rule `[0-9]*.x` (push whitelist `admin`; same status check; administrators must follow the rules)
 - [ ] delete branch after merge
 - [ ] registered in Packeton (Submit → VCS (auto))
 - [ ] webhook to Packeton **with** `composer_package_name=activit/<repo>` (push, branch/tag creation, deletion)
@@ -703,7 +714,8 @@ For every project repo (`shop-a`, `shop-b`):
 - [ ] `composer.json`: Packeton repository, `preferred-install: dist`, module constraint; `vendor/` and `web/` committed
 - [ ] `.gitignore` has `web/sites/default/files/` and `config/sync/.htaccess`
 - [ ] `.gitea/workflows/` has `upstream.yml` and `checks.yml` (from `seed/project-template`)
-- [ ] branch rule `main` **after** the first push; delete branch after merge
+- [ ] branch rule `main` **after** the first push (disable push; status check; administrators must follow the rules);
+  delete branch after merge
 - [ ] Packeton credential available to DDEV through `~/.ddev/homeadditions/.composer/auth.json` (once per machine)
 
 ## Appendix D — troubleshooting

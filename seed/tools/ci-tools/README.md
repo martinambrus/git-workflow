@@ -66,3 +66,11 @@ scenarios: a project on 1.x could not send a fix once `main` had moved to 2.0.0)
 | `bin/update-prs.sh` | called by Release | after opening an update PR: close project PRs (with the Upstream marker) whose own module diff reverse-applies to the release and that change nothing else, deleting their branch; otherwise comment what to do |
 | `bin/check-project.sh` | project repo | a strict drift failure in our own modules points to the Upstream comment |
 
+## The developer's PR becomes the update (v1.6.0)
+
+| Script | What changed |
+| --- | --- |
+| `bin/update-prs.sh` | when exactly one open project PR carries the Upstream marker for the package and its own module diff reverse-applies to the release: `composer update <package>` on **that** branch, one commit, plain push (never forced), a comment with the 9.3/9.4 checklist, and a conflict recipe if Gitea reports the PR unmergeable afterwards. Otherwise a separate update PR as before (v1.5.0 close/comment logic) |
+| `bin/upstream.sh` | no merge request when the target line already contains the change (merged, not released); the project PR comment says so |
+| comments | "Do not merge this pull request yet … the Release job adds the release to this pull request" |
+
