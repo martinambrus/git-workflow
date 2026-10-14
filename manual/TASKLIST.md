@@ -577,8 +577,10 @@ and implements the new hook; only **shop-b** gets it.
   ddev composer require "activit/ait_banners:^1.1"
   git add -A && git commit -m "Allow 1.x updates again" && git push -u origin unfreeze/ait-banners
   ```
-  PR → merge; make sure the topic `activit-project` is back. ✅ Release the next 1.x patch: shop-a receives its
-  update PR again, with a catch-up diff covering everything it missed. 📸
+  PR → merge; make sure the topic `activit-project` is back. The catch-up happens in this PR already:
+  `composer require` with the wider constraint installs the newest allowed version (here `v1.1.4`), so its lock diff
+  covers everything the project missed. ✅ Release the next 1.x patch (`v1.1.5`, as in 10.1/10.2): shop-a receives
+  its update PR again (`v1.1.4 -> 1.1.5`). 📸
   To move it to **2.x** as well (they bought the major): `ddev composer require "activit/ait_banners:^2.0"` in a PR
   (shop-a has no extension, so there is no conflict). ⚠ This is a deliberate act; no job does it.
 
