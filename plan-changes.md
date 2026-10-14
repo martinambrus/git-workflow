@@ -137,8 +137,9 @@ that PR turns green and is merged; it falls back to a separate update PR (closin
 several PRs change the module, the branch moved, or the change is not fully released; (d) the Upstream job opens no
 second merge request for a change that is merged but not released; (e) protection rules block admins from
 force-merging red PRs; (f) main devs reply `/merge …` and `/release …` in the project PR and the bot
-merges the module MR and tags the release (Owners team only). *Evidence:* F38 (v1.5.0), F39 (v1.6.0), F40 (v1.7.0),
-e2e step 3 and L6.
+merges the module MR and tags the release (Owners team only); (g) forward-port PRs ask for `/release` (merge + tag)
+or `/merge`, and the project PR tracks every hop in one comment. *Evidence:* F38 (v1.5.0), F39 (v1.6.0), F40 (v1.7.0),
+F41 (v1.8.0), e2e step 3 and L6.
 
 ### Section 8 and 9 (release, apply a release)
 

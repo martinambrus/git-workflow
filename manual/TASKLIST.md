@@ -192,16 +192,16 @@ containing `dev` and `bot`; you hold a `BOT_TOKEN`.
   cp -a $REPO/seed/tools/ci-tools/. ci-tools/ && cd ci-tools
   git add -A && git commit -m "ci-tools: upstream, release, update-prs, checks, forward-port"
   git branch -M main && git push -u origin main
-  for t in v1.0.0 v1.1.0 v1.2.0 v1.3.0 v1.3.1 v1.4.0 v1.5.0 v1.6.0 v1.7.0; do git tag -a $t -m "ci-tools $t"; done
+  for t in v1.0.0 v1.1.0 v1.2.0 v1.3.0 v1.3.1 v1.4.0 v1.5.0 v1.6.0 v1.7.0 v1.8.0; do git tag -a $t -m "ci-tools $t"; done
   git push origin --tags
   ```
   ✅ the repo shows `bin/upstream.sh`, `bin/release.sh`, `bin/update-prs.sh`, `bin/check-project.sh`,
-  `bin/check-module.sh`, `bin/forward-port.sh`, `bin/release-reminder.sh`, `bin/commands.sh`, and nine tags. 📸
-  *Why nine tags:* a tag is never moved; the workflow stubs pin `v1.2.0` (module checks), `v1.4.0` (forward-port)
-  and `v1.7.0` (project checks, upstream, commands, release, release reminder); the older tags are history. In your own setup
-  you would publish real versions.
+  `bin/check-module.sh`, `bin/forward-port.sh`, `bin/release-reminder.sh`, `bin/commands.sh`, and ten tags. 📸
+  *Why ten tags:* a tag is never moved; the workflow stubs pin `v1.2.0` (module checks) and `v1.8.0` (everything
+  else: project checks, upstream, commands, release, release reminder, forward-port); the older tags are history. In
+  your own setup you would publish real versions.
 
-**Done when:** `git ls-remote --tags http://gitea.test:3000/activit/ci-tools.git` lists the nine tags.
+**Done when:** `git ls-remote --tags http://gitea.test:3000/activit/ci-tools.git` lists the ten tags.
 
 ---
 
@@ -222,7 +222,7 @@ key, and name `activit/<repo>`.
   git clone http://admin:<password>@gitea.test:3000/activit/ait_banners.git
   cd ait_banners
   cp -a $REPO/seed/modules/ait_banners/. .
-  cp -a $REPO/seed/module-template/.gitea .          # the module's workflows: checks, release, forward-port, release-reminder
+  cp -a $REPO/seed/module-template/.gitea .          # the module's workflows: checks, release, forward-port, release-reminder, commands
   git add -A && git commit -m "Initial module"
   git branch -M main && git push -u origin main
   ```
@@ -531,14 +531,18 @@ and implements the new hook; only **shop-b** gets it.
   📸 the one PR and the empty list in shop-b. Merge it. shop-a is now on `v1.1.1`.
 - [ ] **10.3 The forward-port.** Pushing to `1.x` triggered the **Forward-port** job: ✅ a PR
   `fwd/1.x/<sha>-to-main` ("Forward-port (1.x -> main): …") exists in the module repo. 📸 Its title and body.
-  Let Checks run and merge it: the fix now exists on `main` too.
-  *(If a `2.x` branch existed, it would target `2.x` first and then `main`: each merge triggers the next hop.)*
+  Let Checks run and merge it: the fix now exists on `main` too. The bot's comment on it offers `/merge` (merge only)
+  and `/release v2.0.x` (merge **and** release, 10.4 in one step); main devs can reply either.
+  *(If a `2.x` branch existed, it would target `2.x` first and then `main`: each merge triggers the next hop, and
+  each hop asks for its own `/release`.)*
 - [ ] **10.4 It reaches the 2.x client with the next 2.x release:**
   ```bash
   cd $REPO/workspace/ait_banners && git switch main && git pull
   git tag -a v2.0.1 -m "2.0.1: includes the forwarded 1.x fix" && git push origin v2.0.1
   ```
   ✅ update PR `update/ait_banners-2.0.1` in **shop-b** only. Merge it. 📸
+  *(Or, instead of the tag commands: reply `/release v2.0.1` on the forward-port PR of 10.3. The bot tags the merge
+  commit and lists what the release contains.)*
 - [ ] **10.5 A fix that conflicts** (the 2.0 refactor touched the same line):
   ```bash
   git fetch origin && git switch -c fix/comment origin/1.x
@@ -630,8 +634,13 @@ into a merge request in the module repo.
   `1.x` (requested by @admin)", and the *release-reminder* job adds "Module change merged … **Main devs:** reply here
   with `/release activit/ait_banners v1.1.y`" (the next patch version on `1.x`). 📸
   Only members of the `activit` **Owners** team (the main devs) can run the commands; anybody else gets "only main
-  devs … can run": try it as `dev` if you like. The Forward-port job opens its `fwd/1.x/...` PR into `main` as usual:
-  merge it. (Merging the module MR in the module repo works too; the reminder then appears all the same.)
+  devs … can run": try it as `dev` if you like. (Merging the module MR in the module repo works too; the reminder
+  then appears all the same.)
+  The Forward-port job opens its `fwd/1.x/...` PR into `main` with a prompt: reply there **`/release v2.0.y`** to merge
+  it and release it for the 2.x projects at once (the bot tags the merge commit and lists what the release contains;
+  shop-b then gets its update PR), or `/merge` to merge only (then the bot asks for `/release` on the merged PR). 📸
+  Back in shop-a's PR, a bot comment **"Where this change went"** lists every forward-port of the change and keeps
+  its state up to date: open, merged, **released as `v2.0.y`**, or "does not apply cleanly" (with the issue). 📸
   ⚠ If another in-place change to the **same lines** was merged into `1.x` since shop-a's release, `/merge` reports
   that Gitea refused the merge: the main dev resolves the conflict in the module MR. Ignore "This branch is
   out-of-date with the base branch" there: the bot branch is cut from the locked release on purpose.
@@ -652,9 +661,10 @@ into a merge request in the module repo.
   If the PR conflicts with `main` after the update (`main` changed `composer.lock` meanwhile), the bot comments the
   exact commands to fix it (take main's version of the conflicted Composer files, `composer update <module>`).
   ⚠ Never commit to an `up/...` branch by hand: it is rebuilt on every push of the project branch.
-  ⚠ Projects and modules set up before ci-tools `v1.7.0` (README findings 37–40) need the new workflow files first:
-  `upstream.yml` + `checks.yml` + `commands.yml` in the project, `release.yml` + `release-reminder.yml` on the module's
-  release lines, and `bot` on the module's protected-tag list.
+  ⚠ Projects and modules set up before ci-tools `v1.8.0` (README findings 37–41) need the new workflow files first:
+  `upstream.yml` + `checks.yml` + `commands.yml` in the project; `release.yml`, `release-reminder.yml`,
+  `forward-port.yml` and `commands.yml` on the module's release lines (ci-tools `v1.8.0`); and `bot` on the module's
+  protected-tag list.
 ---
 
 ## Phase 13 — Optional: external customers in Packeton
@@ -689,7 +699,7 @@ The workflow stubs in `seed/` contain these literally. Use them, or edit the stu
 | Users | `admin` (main dev: tags, release lines), `dev`, `bot` (automation) |
 | Org secrets (both orgs) | `BOT_TOKEN`, `PACKETON_TOKEN` |
 | Runner label | `activit-runner` |
-| ci-tools tags | `v1.2.0` module checks, `v1.4.0` forward-port, `v1.7.0` project checks + upstream + commands + release + release reminder |
+| ci-tools tags | `v1.2.0` module checks, `v1.8.0` everything else (project checks, upstream, commands, release, release reminder, forward-port) |
 | Status check required on `main` and `[0-9]*.x` | `checks / checks (pull_request)` |
 | Opt-in topic for update PRs | `activit-project` |
 | Default branch | `main` |
@@ -699,7 +709,7 @@ The workflow stubs in `seed/` contain these literally. Use them, or edit the stu
 For every module repo (`ait_banners`, `ait_banners_ribbon`, ...):
 
 - [ ] repo in `activit`, Private; default branch `main`
-- [ ] seeded with the module files **and** `seed/module-template/.gitea` (checks, release, forward-port, release-reminder workflows)
+- [ ] seeded with the module files **and** `seed/module-template/.gitea` (checks, release, forward-port, release-reminder, commands workflows)
 - [ ] protected tag pattern `v*`, allowed users `admin` and `bot` (bot: for `/release`)
 - [ ] branch rule `main` (disable push; status `checks / checks (pull_request)`; administrators must follow the rules)
 - [ ] branch rule `[0-9]*.x` (push whitelist `admin`; same status check; administrators must follow the rules)

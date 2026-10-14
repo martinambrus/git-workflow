@@ -1,6 +1,7 @@
 #!/bin/bash
-# Commands in a project pull request (workflow commands.yml, event issue_comment): the main devs drive the in-place
-# module flow from the developer's pull request instead of switching repositories.
+# Commands in pull requests (workflow commands.yml, event issue_comment). In a project pull request the main devs drive
+# the in-place module flow from the developer's pull request instead of switching repositories; in a module
+# repository they merge and release forward-port pull requests (/merge, /release vX.Y.Z).
 #   /merge <org>/<module>#<n>          merge the module merge request the Upstream job opened for THIS pull request
 #   /release <org>/<module> v<x.y.z>   tag that version on the module's release line; the Release job then adds the
 #                                      release to this pull request
@@ -17,16 +18,73 @@ project=${REPOSITORY##*/}
 c=$(api GET "/repos/${REPOSITORY}/issues/comments/${COMMENT_ID}") || die "cannot read comment ${COMMENT_ID}"
 user=$(jq -r '.user.login' <<<"$c")
 line=$(jq -r '.body' <<<"$c" | head -1 | tr -d '\r')
-case $line in /merge\ *|/release\ *) ;; *) log "not a command: nothing to do"; exit 0 ;; esac
+case $line in /merge|/merge\ *|/release\ *) ;; *) log "not a command: nothing to do"; exit 0 ;; esac
 read -r cmd arg1 arg2 _ <<<"$line"
 log "$user: $cmd ${arg1:-} ${arg2:-}"
 
 reply() { api POST "/repos/${REPOSITORY}/issues/${PR}/comments" "$(jq -n --arg b "$1" '{body:$b}')" >/dev/null || true; log "replied: ${1%%$'\n'*}"; }
-usage() { reply "@${user}: \`${line}\` was not understood. Use \`/merge ${MODULE_ORG}/<module>#<number>\` or \`/release ${MODULE_ORG}/<module> v<x.y.z>\`."; exit 0; }
-
 pr=$(api GET "/repos/${REPOSITORY}/pulls/${PR}") || { log "#${PR} is not a pull request: ignored"; exit 0; }
-[ "$(jq -r .state <<<"$pr")" = open ] || { reply "@${user}: this pull request is not open: nothing done."; exit 0; }
 head_ref=$(jq -r .head.ref <<<"$pr")
+
+# ---- in a module repository: forward-port pull requests (fwd/<from>/<sha>-to-<to>) -------------------------------
+#   /merge          merge it (Checks green)
+#   /release vX.Y.Z merge it (if still open) and tag the merge commit, or tag the line's head if it was merged already
+if [ "${REPOSITORY%%/*}" = "$MODULE_ORG" ]; then
+  usage() { reply "@${user}: \`${line}\` was not understood. On a forward-port pull request use \`/merge\` or \`/release v<x.y.z>\`."; exit 0; }
+  # a forward-port PR carries <!-- forward-port:<from>:<sha> --> (its head branch is gone once it is merged)
+  [[ $(jq -r '.body // ""' <<<"$pr") =~ \<\!--\ forward-port:([^:]+):[0-9a-f]{40}\ --\> ]] \
+    || { reply "@${user}: commands work here only on forward-port pull requests (and in project pull requests for module changes): nothing done."; exit 0; }
+  from=${BASH_REMATCH[1]}
+  is_main_dev "$user" "$MODULE_ORG" || { reply "@${user}: only main devs (members of the \`${MODULE_ORG}\` Owners team) can run \`${cmd}\`: nothing done."; exit 0; }
+  base=$(jq -r .base.ref <<<"$pr")
+  state=$(jq -r .state <<<"$pr"); merged=$(jq -r .merged <<<"$pr")
+  case $cmd in
+    /merge)   [ -z "${arg1:-}" ] || usage ;;
+    /release) [[ ${arg1:-} =~ ^v([0-9]+)\.[0-9]+\.[0-9]+$ ]] && [ -z "${arg2:-}" ] || usage; version=$arg1; major=${BASH_REMATCH[1]} ;;
+  esac
+  [ "$merged" = true ] || [ "$state" = open ] || { reply "@${user}: this pull request was closed without merging: nothing done."; exit 0; }
+  [ "$cmd" = /merge ] && [ "$merged" = true ] && { reply "@${user}: already merged."; exit 0; }
+
+  work=$(mktemp -d)
+  git clone -q "${GITEA_URL}/${REPOSITORY}.git" "$work/m" || { reply "@${user}: cannot read ${REPOSITORY}: nothing done."; exit 0; }
+  if [ "$cmd" = /release ]; then             # check the version BEFORE merging anything
+    git -C "$work/m" rev-parse -q --verify "refs/tags/${version}" >/dev/null && { reply "@${user}: \`${version}\` already exists: nothing done."; exit 0; }
+    latest=$(latest_tag "$work/m" "origin/${base}")
+    if [ -n "$latest" ]; then
+      [ "${latest#v${major}.}" != "$latest" ] || { reply "@${user}: \`${base}\` carries \`${latest}\`, so \`${version}\` is on the wrong line: nothing done."; exit 0; }
+      [ "$(printf '%s\n%s\n' "${latest#v}" "${version#v}" | sort -V | tail -1)" = "${version#v}" ] && [ "${latest#v}" != "${version#v}" ] \
+        || { reply "@${user}: \`${version}\` is not newer than \`${latest}\`, the latest release on \`${base}\`: nothing done."; exit 0; }
+    fi
+  fi
+
+  if [ "$merged" != true ]; then
+    st=$(api GET "/repos/${REPOSITORY}/commits/$(jq -r .head.sha <<<"$pr")/status" | jq -r '.state // "pending"')
+    [ "$st" = success ] || { reply "@${user}: the Checks of this pull request are \`${st}\`, not green yet: try again when they pass."; exit 0; }
+    api POST "/repos/${REPOSITORY}/pulls/${PR}/merge" '{"Do":"merge","delete_branch_after_merge":true}' >/dev/null \
+      || { reply "@${user}: Gitea refused the merge (conflict, or a branch rule): nothing done."; exit 0; }
+    sha=""; for _ in 1 2 3 4 5; do sha=$(api GET "/repos/${REPOSITORY}/pulls/${PR}" | jq -r '.merge_commit_sha // empty'); [ -n "$sha" ] && break; sleep 2; done
+    [ "$cmd" = /merge ] && { reply "Merged into \`${base}\` (requested by @${user}). Nothing is released yet: reply \`/release v<x.y.z>\` here when it should be."; exit 0; }
+  else
+    sha=$(git -C "$work/m" rev-parse "origin/${base}")   # merged earlier: release the line as it is now
+  fi
+
+  git -C "$work/m" fetch -q origin
+  if [ -n "${latest:-}" ]; then list=$(git -C "$work/m" log --first-parent --format='- %s (%h)' "${latest}..${sha}" | head -30)
+  else list=$(git -C "$work/m" log --first-parent --format='- %s (%h)' -n 15 "$sha"); fi
+  list=$(sed -E "s/^- Merge pull request '(.*)' \(#([0-9]+)\) from .* into [^ ]+ \(([0-9a-f]+)\)$/- \1 (#\2, \3)/" <<<"$list")
+  if api POST "/repos/${REPOSITORY}/tags" "$(jq -n --arg t "$version" --arg c "$sha" --arg m "${version#v} (released from ${REPOSITORY}#${PR} by ${user})" '{tag_name:$t,target:$c,message:$m}')" >/dev/null; then
+    reply "$([ "$merged" != true ] && echo "Merged into \`${base}\` and tagged" || echo "Tagged") \`${version}\` at \`${sha:0:8}\` (requested by @${user}). The Release job publishes it; projects on this line get update pull requests. It contains, since \`${latest:-the start}\`:
+${list}"
+    overview "$(origin_of "$REPOSITORY" "$sha")" "${REPOSITORY}#${PR}" "$(fwd_line "$REPOSITORY" "$PR" "$from" "$base" "merged, **released as \`${version}\`**")"
+  else
+    reply "@${user}: Gitea refused the tag (the bot may not be on the protected-tag list). Tag it yourself: \`git fetch origin && git tag -a ${version} -m \"${version#v}\" ${sha:0:12} && git push origin ${version}\`"
+  fi
+  exit 0
+fi
+
+# ---- in a project repository: the developer's pull request ---------------------------------------------------------
+usage() { reply "@${user}: \`${line}\` was not understood. Use \`/merge ${MODULE_ORG}/<module>#<number>\` or \`/release ${MODULE_ORG}/<module> v<x.y.z>\`."; exit 0; }
+[ "$(jq -r .state <<<"$pr")" = open ] || { reply "@${user}: this pull request is not open: nothing done."; exit 0; }
 
 case $cmd in
   /merge)   [[ ${arg1:-} =~ ^([A-Za-z0-9_.-]+)/([A-Za-z0-9_.-]+)#([0-9]+)$ ]] || usage
@@ -67,7 +125,7 @@ work=$(mktemp -d)
 git clone -q "${GITEA_URL}/${module}.git" "$work/m" || { reply "@${user}: cannot read ${module}: nothing done."; exit 0; }
 if git -C "$work/m" rev-parse -q --verify "refs/remotes/origin/${major}.x" >/dev/null; then line="${major}.x"; else line=main; fi
 git -C "$work/m" rev-parse -q --verify "refs/tags/${version}" >/dev/null && { reply "@${user}: \`${version}\` already exists in ${module}: nothing done."; exit 0; }
-latest=$(git -C "$work/m" describe --tags --abbrev=0 --match 'v[0-9]*' --exclude '*-*' "origin/${line}" 2>/dev/null || true)
+latest=$(latest_tag "$work/m" "origin/${line}")
 if [ -n "$latest" ]; then
   [ "${latest#v}" != "${version#v}" ] && [ "$(printf '%s\n%s\n' "${latest#v}" "${version#v}" | sort -V | tail -1)" = "${version#v}" ] \
     || { reply "@${user}: \`${version}\` is not newer than \`${latest}\`, the latest release on \`${line}\`: nothing done."; exit 0; }

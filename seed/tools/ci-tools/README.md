@@ -81,3 +81,13 @@ scenarios: a project on 1.x could not send a fix once `main` had moved to 2.0.0)
 | `bin/commands.sh` | project repo, `issue_comment` (`commands.yml`) | `/merge <org>/<module>#<n>`: merge the module MR the Upstream job opened for this PR (Checks green); `/release <org>/<module> v<x.y.z>`: tag it on the project's line (`<major>.x` or `main`). Main devs only (Owners team of the module org); the comment is read by id, never interpolated into a shell |
 | `lib/common.sh` | | `next_version` (next patch on a line), `is_main_dev` (Owners team membership) |
 
+## Releasing forward-ports from their PR (v1.8.0)
+
+| Script | What changed |
+| --- | --- |
+| `bin/forward-port.sh` | comments on each forward-port PR: reply `/release vX.Y.Z` (merge + release) or `/merge`; adds the hop to the origin project PR's overview (also "already there" and conflicts) |
+| `bin/commands.sh` | in module repos, on forward-port PRs: `/merge`; `/release vX.Y.Z` merges and tags the merge commit (or tags the line's head if merged already) and lists what the release contains |
+| `bin/release-reminder.sh` | a merged forward-port: overview "released as vX" or "not released yet" plus a `/release` prompt |
+| `lib/common.sh` | `origin_of` (project PR behind a module commit, across hops), `overview` (one updatable comment), `latest_tag` (line-aware) |
+| `commands.yml` | now also in the module template |
+

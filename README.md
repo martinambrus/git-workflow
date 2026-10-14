@@ -186,6 +186,24 @@ Update PRs, Checks, protected branches, Packeton grants). 78 assertions:
     `1.x` and added to the PR, which went green and merged; with the bot off the tag list the manual command came back.
     The lab's tag rule now lists `admin` and `bot`, and `./lab smoke` checks that `dev` cannot tag.
 
+41. **Forward-ports moved code but nobody was asked to release it**, and the developer's PR did not show what happened
+    to the change on newer lines. ci-tools **v1.8.0**: the Forward-port job comments on each forward-port PR "reply
+    `/release vX.Y.Z` to merge and release, or `/merge`" (next patch of the *target* line); `commands.sh` handles both in
+    module repos (Owners team only; Checks green; the version must be new, on the target line's major and newer than
+    its latest tag); `/release` merges and **tags the merge commit** (nothing landing on the line in between can slip
+    into the tag), or tags the line's head when the PR was merged already, and lists what the release contains. A
+    forward-port PR is recognised by its `forward-port:<from>:<sha>` marker, because Gitea reports the head of a merged
+    PR whose branch was deleted as `refs/pull/<n>/head`. `release-reminder.sh` handles merged forward-ports too (asks
+    for `/release` if the merge was not tagged). The project PR gets one comment, "Where this change went", updated in
+    place: open → merged → **released as vX**, "already there", or "does not apply cleanly" (with the issue). The
+    origin is found through Gitea's "PR that merged this commit" (`/commits/{sha}/pull`): an Upstream MR names its
+    project branch, a forward-port PR names its source commit, so a chain 1.x → 2.x → main is traced back hop by hop.
+    `latest_tag`/`next_version` only count `vN.*` tags on a line `N.x` (a 3.0.0 tag reachable from `2.x` once suggested
+    `v3.0.1` for `2.x`). Verified on a throwaway Gitea 28.1 + Packeton + act_runner with `1.x`, `2.x`, `main` (3.0):
+    `/merge` in the project PR while the module Checks ran ("pending, not green yet"), then merged; hop 1 prompt
+    `/release v2.0.2`, released, tag = merge commit; hop 2 opened and traced back to the project PR; `/merge` only,
+    then the reminder; `/release v3.0.1` on the merged PR tagged `main`; a conflicting change showed as an issue line.
+
 ## Fresh-machine replay (verified)
 
 Done from a plain `git clone` of this repository on a machine that had been wiped of every lab container, volume,
@@ -331,7 +349,9 @@ branch), which then turns green and is merged; it falls back to a separate updat
 Upstream job opens no second merge request for a change that is already merged but not released (finding 39).
 Since v1.7.0 the main devs drive it from the project PR: the bot's comments end with the exact reply, `/merge
 activit/<module>#<n>` (the bot merges the module MR) and then `/release activit/<module> v<x.y.z>` (the bot tags it;
-`commands.yml`, `bin/commands.sh`); only members of the module org's Owners team may run them (finding 40). The integrity check (module branch ==
+`commands.yml`, `bin/commands.sh`); only members of the module org's Owners team may run them (finding 40).
+Since v1.8.0 forward-port PRs ask for `/release v<x.y.z>` (merge + tag the merge commit) or `/merge`, and the
+project PR the change came from gets one "Where this change went" comment that tracks every hop (finding 41). The integrity check (module branch ==
 project folder) runs **before** the push. Re-running is safe.
 
 Verified here: `shop-a` branch `feature/promo-banner` (in-place edit of `ait_banners` locked to `v1.0.1`) produced

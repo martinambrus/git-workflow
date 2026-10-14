@@ -217,10 +217,17 @@ wait_for 300 "release reminder on MR #$mr" bash -c ". '$LAB_ROOT/ops/bin/lib.sh'
   || bad "no (correct) release reminder on MR #$mr: $(comments_of "$PBASE" "$mr" | head -3 | tr '\n' ' ')"
 [ -n "$ppr" ] && { comments_of "$SITE_ORG/$P_OLD" "$ppr" | grep -q "upstream-merged:$PBASE#$mr" && ok "project PR #$ppr was told its change is merged and waits for the release" || bad "project PR #$ppr got no 'merged' notice"; }
 fp=$(wait_pr "$PBASE" "fwd/1.x/" 2.x 300) && ok "Forward-port job opened PR #$fp: 1.x -> 2.x (the next higher line, not main)" || { bad "no forward-port PR from 1.x"; fp=; }
+if [ -n "$fp" ] && [ -n "$ppr" ]; then
+  comments_of "$PBASE" "$fp" | grep -q "fwd-prompt" && ok "forward-port PR #$fp asks the main devs for /release or /merge" || bad "no /release prompt on forward-port PR #$fp"
+  wait_for 120 "overview in $P_OLD#$ppr" bash -c ". '$LAB_ROOT/ops/bin/lib.sh'; api GET '/repos/$SITE_ORG/$P_OLD/issues/$ppr/comments?limit=100' | grep -q 'fp:$PBASE#$fp'" \
+    && ok "the project PR $P_OLD#$ppr lists forward-port #$fp in its overview" || bad "no overview line for #$fp in $P_OLD#$ppr"
+fi
 if [ -n "$fp" ]; then
   merge_forward_pr "$PBASE" "$fp" && ok "forward-port PR #$fp passed Checks and merged into 2.x" || bad "forward-port PR #$fp not merged"
   fp2=$(wait_pr "$PBASE" "fwd/2.x/" main 300) && ok "merging into 2.x triggered the next hop: PR #$fp2 2.x -> main" || { bad "no second hop 2.x -> main"; fp2=; }
   [ -n "$fp2" ] && { merge_forward_pr "$PBASE" "$fp2" && ok "second hop merged: the fix is on 1.x, 2.x and main" || bad "second hop PR #$fp2 not merged"; }
+  [ -n "$fp2" ] && [ -n "$ppr" ] && { wait_for 120 "overview line for #$fp2" bash -c ". '$LAB_ROOT/ops/bin/lib.sh'; api GET '/repos/$SITE_ORG/$P_OLD/issues/$ppr/comments?limit=100' | grep -q 'fp:$PBASE#$fp2'" \
+    && ok "the overview follows the second hop too (#$fp2, traced back through #$fp)" || bad "no overview line for the second hop #$fp2"; }
 fi
 tag_release "$PBASE" 1.x v1.0.2 && wait_for 180 "v1.0.2 indexed" pk_has "$PBASE" v1.0.2 && ok "v1.0.2 tagged on the 1.x branch and indexed" || die "cannot release v1.0.2"
 c=$(release_result "$PBASE" v1.0.2); [ "$c" = success ] && ok "Release job for v1.0.2 finished: $c" || bad "Release job for v1.0.2: $c"

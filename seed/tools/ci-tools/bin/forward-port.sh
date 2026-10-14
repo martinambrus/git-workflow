@@ -51,13 +51,17 @@ for c in "${commits[@]}"; do
     files=$(git diff --name-only --diff-filter=U | tr '\n' ' ')
     if [ -z "$files" ]; then                                    # nothing unmerged: the change is already on the target
       git cherry-pick --abort >/dev/null 2>&1 || true
-      log "$short: already present on $target (empty cherry-pick)"; continue
+      log "$short: already present on $target (empty cherry-pick)"
+      overview "$(origin_of "$REPOSITORY" "$c")" "${REPOSITORY}:${target}:${c}" "\`${BRANCH}\` → \`${target}\`: already there, nothing to port"
+      continue
     fi
     git cherry-pick --abort >/dev/null 2>&1 || true
     body=$(printf '%s\n\nThe change `%s` ("%s") was merged into `%s` but does not apply cleanly to `%s`.\n\nConflicting files: %s\n\nPort it by hand: `git switch -c %s origin/%s && git cherry-pick -x %s%s` and open a pull request into `%s`.\n' \
            "$marker" "$short" "$subject" "$BRANCH" "$target" "$files" "$fb" "$target" "$([ ${#flags[@]} -gt 0 ] && echo '-m 1 ')" "$c" "$target")
     num=$(api POST "/repos/$REPOSITORY/issues" "$(jq -n --arg t "Forward-port needed ($BRANCH -> $target): $subject" --arg b "$body" '{title:$t,body:$b}')" | jq -r .number)
     warn "$short does not apply to $target ($files): opened issue #$num"
+    overview "$(origin_of "$REPOSITORY" "$c")" "${REPOSITORY}#${num}" \
+      "[${REPOSITORY}#${num}](${GITEA_URL}/${REPOSITORY}/issues/${num}) \`${BRANCH}\` → \`${target}\`: **does not apply cleanly**, needs a manual port (the issue says how)"
     rc=1; continue
   fi
 
@@ -66,5 +70,12 @@ for c in "${commits[@]}"; do
          "$marker" "$short" "$subject" "$BRANCH" "$target" "$default")
   num=$(api POST "/repos/$REPOSITORY/pulls" "$(jq -n --arg t "Forward-port ($BRANCH -> $target): $subject" --arg b "$body" --arg h "$fb" --arg base "$target" '{title:$t,body:$b,head:$h,base:$base}')" | jq -r .number)
   log "$short: opened ${REPOSITORY}#${num} into $target: ${GITEA_URL}/${REPOSITORY}/pulls/${num}"
+  nv=$(next_version . "origin/$target")
+  prompt="<!-- fwd-prompt -->
+**Main devs:** once the Checks are green, reply here with
+\`/release ${nv}\`
+to merge this into \`${target}\` and release it right away (the bot tags the merge commit; the release contains everything unreleased on \`${target}\`, the reply lists it), or with \`/merge\` to merge only. Merging it does not release anything by itself."
+  api POST "/repos/$REPOSITORY/issues/${num}/comments" "$(jq -n --arg b "$prompt" '{body:$b}')" >/dev/null || warn "#$num: prompt comment failed"
+  overview "$(origin_of "$REPOSITORY" "$c")" "${REPOSITORY}#${num}" "$(fwd_line "$REPOSITORY" "$num" "$BRANCH" "$target" "open; main devs reply \`/release ${nv}\` there")"
 done
 exit $rc
