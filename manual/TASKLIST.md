@@ -289,10 +289,20 @@ push to `main` is refused; a `dev` user cannot push a `v*` tag.
   YAML
   rm -rf web                      # 'ddev config' creates a stub that create-project cannot use
   ddev start
-  ddev composer config --global http-basic.packeton.test admin <PACKETON_TOKEN>
   ddev composer create-project drupal/recommended-project:^11 . --no-interaction
   ```
-  ⚠ Finding 9: DDEV's "global" Composer config is **per project**; set the Packeton token in every project.
+  **Before the first `ddev start`, once per machine**, give every DDEV project the Packeton credential:
+  ```bash
+  mkdir -p ~/.ddev/homeadditions/.composer
+  cat > ~/.ddev/homeadditions/.composer/auth.json <<JSON
+  { "http-basic": { "packeton.test": { "username": "admin", "password": "<PACKETON_TOKEN>" } } }
+  JSON
+  chmod 600 ~/.ddev/homeadditions/.composer/auth.json
+  ```
+  DDEV copies `~/.ddev/homeadditions/` into each web container's home on every start.
+  ⚠ Finding 36: `ddev composer config --global ...` is stored **inside the container** and is lost on `ddev poweroff`
+  or a rebuild, after which Packeton answers 401. Finding 9 (per-project credential) is covered by the same file.
+  Keep the file outside any repository (not in a project's `.ddev/`), so the token can never be committed.
   ⚠ Finding 35: if you run these through CI / ssh / an IDE task, append `</dev/null` to `ddev composer ...`,
   otherwise it hangs silently.
 - [ ] **6.3 Point the project at Packeton** (plan 2.5) and install the module:
@@ -649,7 +659,7 @@ For every project repo (`shop-a`, `shop-b`):
 - [ ] `.gitignore` has `web/sites/default/files/` and `config/sync/.htaccess`
 - [ ] `.gitea/workflows/` has `upstream.yml` and `checks.yml` (from `seed/project-template`)
 - [ ] branch rule `main` **after** the first push; delete branch after merge
-- [ ] Packeton token set **in this project's DDEV** (`ddev composer config --global http-basic...`)
+- [ ] Packeton credential available to DDEV through `~/.ddev/homeadditions/.composer/auth.json` (once per machine)
 
 ## Appendix D — troubleshooting
 
@@ -658,7 +668,7 @@ For every project repo (`shop-a`, `shop-b`):
 | Webhook delivery: `denied by egress policy` | task 1.3 (`EGRESS_MODE=lax`, `ALLOWED_HOST_LIST`) |
 | Packeton: `Missing or invalid payload` / nothing indexes | org-wide or wrong hook: use the per-repo URL with `composer_package_name` (finding 1) |
 | Packeton cannot clone a repo | task 2.4 (`auth.json`, host key with `:3000`); bot token scopes |
-| Composer: package "could not be found" or stale versions | Packeton token missing in this project's DDEV, or silent 401 fallback (finding 8/9) |
+| Composer: package "could not be found", 401, or stale versions | Packeton credential missing in DDEV (lost after `ddev poweroff`: use `~/.ddev/homeadditions/.composer/auth.json`, 6.2), or silent 401 fallback (findings 8, 9, 36) |
 | `ddev composer ...` hangs without output | stdin was an open pipe (CI/ssh): add `</dev/null` (finding 35) |
 | First push to a project is rejected | you protected `main` before the first push (6.6) |
 | PR cannot merge: "required status check" never appears | runner offline (phase 3) or the status name differs: it must be `checks / checks (pull_request)` |

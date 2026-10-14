@@ -123,6 +123,12 @@ Update PRs, Checks, protected branches, Packeton grants). 78 assertions:
     reads, states *why* a project change failed, and leaves the disposable repos in place on failure so the next
     occurrence can be diagnosed. If you hit it, re-run `./lab e2e lines` and open an issue with the printed reason.
 
+36. **DDEV loses the Packeton credential on `ddev poweroff`.** `ddev composer config --global ...` writes into the web
+    container's home, which is recreated by `ddev poweroff` / rebuilds; the next `composer require` gets a 401 (found in
+    the manual walkthrough the morning after a poweroff). Fix, verified: put the credential in
+    `~/.ddev/homeadditions/.composer/auth.json` (DDEV copies it into every project's container on each start); it also
+    removes the per-project step of finding 9 and keeps the token out of every repository.
+
 ## Fresh-machine replay (verified)
 
 Done from a plain `git clone` of this repository on a machine that had been wiped of every lab container, volume,
