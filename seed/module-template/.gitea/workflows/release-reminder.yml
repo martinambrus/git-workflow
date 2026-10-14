@@ -1,0 +1,23 @@
+name: release-reminder
+# When a merge request from the Upstream job (branch up/...) is merged, remind the main dev that the change is not
+# released yet, with the next version and how to tag it, and tell the waiting project pull request. Plain shell steps
+# from ci-tools, no `uses:` (plan 2.4).
+on:
+  pull_request:
+    types: [closed]
+
+jobs:
+  release-reminder:
+    runs-on: activit-runner
+    steps:
+      - name: Release reminder
+        env:
+          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+        run: |
+          set -euo pipefail
+          git clone -q --depth 1 --branch v1.5.0 \
+            "http://bot:${BOT_TOKEN}@gitea.test:3000/activit/ci-tools.git" /tmp/ci-tools
+          export GITEA_URL="${{ github.server_url }}" REPOSITORY="${{ github.repository }}" \
+                 PR="${{ github.event.pull_request.number }}" MERGED="${{ github.event.pull_request.merged }}" \
+                 HEAD_REF="${{ github.head_ref }}" BASE_REF="${{ github.base_ref }}"
+          /tmp/ci-tools/bin/release-reminder.sh

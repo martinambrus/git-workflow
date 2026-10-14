@@ -137,6 +137,20 @@ Update PRs, Checks, protected branches, Packeton grants). 78 assertions:
     seconds after the push: the runs were serialised, one MR, one comment); `./lab e2e` now asserts both. Projects
     created before this fix keep the old file: copy `seed/project-template/.gitea/workflows/upstream.yml` in via a PR.
 
+38. **The in-place edit flow left the developer guessing** (manual walkthrough, 12.2): the project PR must not be merged,
+    nobody said so, and after the release it had to be closed by hand. ci-tools **v1.5.0**: the Upstream comment says
+    "do not merge" and lists the next steps (the drift failure points to it); `release-reminder.yml` (new module
+    workflow, `pull_request: closed`) comments on a merged `up/...` merge request with the next patch version and the
+    CLI and web-UI tag steps, and tells the project PR; `update-prs.sh` closes a project PR when its own module diff
+    reverse-applies to the release and it changes nothing else (branch deleted; *Restore branch* undoes it), and
+    otherwise comments (other files changed: merge the update, then `main`; change not or not fully released: stays
+    open). Verified on a throwaway Gitea 28.1 + Packeton + act_runner with a team-member bot: module-only PR closed;
+    two PRs released together (containment, not equality); a PR whose merge request was not merged left open; a PR
+    with a `.gitignore` change left open, and merging `main` into it afterwards left only `.gitignore`. Gitea runs
+    `pull_request: closed` workflows from the merge commit, so `release-reminder.yml` only has to be on the target
+    release line, not in the locked tag. Existing setups: tag ci-tools `v1.5.0`, copy `upstream.yml` + `checks.yml`
+    into each project and `release.yml` + `release-reminder.yml` onto each module's `main` and `<N>.x` (via PRs).
+
 ## Fresh-machine replay (verified)
 
 Done from a plain `git clone` of this repository on a machine that had been wiped of every lab container, volume,
@@ -274,7 +288,10 @@ What it does on every push to a project branch: reads the locked `activit/*` mod
 each module folder with `git archive` of its locked tag, and if they differ pushes **one cumulative commit** to
 `up/<project>/<branch>` in the module repo, opens or updates the merge request (target `<major>.x` if that branch
 exists, else `main`), and comments the link once on the project's pull request. It also runs when a project pull request is opened (the
-first push of a branch comes before its PR), and a concurrency group per branch queues the push run and the PR run. The integrity check (module branch ==
+first push of a branch comes before its PR), and a concurrency group per branch queues the push run and the PR run.
+Since ci-tools v1.5.0 the comment tells the developer not to merge the project PR and what happens next; a merged
+Upstream merge request gets a release reminder (`release-reminder.yml`, next version + how to tag), and the Release
+job's Update PRs step closes project PRs whose module change the release contains (finding 38). The integrity check (module branch ==
 project folder) runs **before** the push. Re-running is safe.
 
 Verified here: `shop-a` branch `feature/promo-banner` (in-place edit of `ait_banners` locked to `v1.0.1`) produced

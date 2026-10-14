@@ -21,6 +21,44 @@ export COMPOSER_AUTH="{\"http-basic\":{\"${phost}\":{\"username\":\"admin\",\"pa
 export COMPOSER_CACHE_DIR; COMPOSER_CACHE_DIR=$(mktemp -d)
 export COMPOSER_NO_INTERACTION=1 COMPOSER_ALLOW_SUPERUSER=1 COMPOSER_MEMORY_LIMIT=-1
 
+# supersede REPO UPDATE_PR MODULE_PATH -> project pull requests whose in-place module change was sent upstream (the
+# Upstream job's marker comment) and is now contained in this release: close them when they change nothing but the
+# module folder, otherwise say what to do. "Contained" = the pull request's own diff of the module folder reverse-
+# applies cleanly to the release (the release may contain more, e.g. other developers' changes). Runs inside the
+# project clone on the update branch (working tree = the release).
+supersede() { local repo=$1 upd=$2 path=$3 n head others comments msg pdiff
+  local marker="<!-- upstream:${package} -->" seen="<!-- superseded:${package}:${ver} -->"
+  while read -r n head; do
+    [ -n "$n" ] || continue
+    comments=$(api GET "/repos/${repo}/issues/${n}/comments?limit=100") || continue
+    jq -e --arg m "$marker" '.[]|select(.body|contains($m))' <<<"$comments" >/dev/null || continue
+    jq -e --arg m "$seen" '.[]|select(.body|contains($m))' <<<"$comments" >/dev/null && continue
+    pdiff=$(mktemp); api GET "/repos/${repo}/pulls/${n}.diff" > "$pdiff" || { warn "$repo#$n: cannot read its diff"; continue; }
+    others=$(api GET "/repos/${repo}/pulls/${n}/files?limit=100" | jq -r --arg p "${path}/" '.[].filename|select(startswith($p)|not)')
+    if ! git apply -R --check --include="${path}/*" "$pdiff" 2>/dev/null; then
+      msg="${seen}
+Release \`${tag}\` of \`${package}\` is out (update pull request #${upd}), but it does not contain all of this pull request's changes in \`${path}\` (pushed after the module merge request was merged, or not merged yet). This pull request stays open; the Upstream job keeps the module merge request up to date."
+      api POST "/repos/${repo}/issues/${n}/comments" "$(jq -n --arg b "$msg" '{body:$b}')" >/dev/null || warn "$repo#$n: comment failed"
+      log "$repo#$n: its module change is not (fully) in ${tag}: left open, commented"
+    elif [ -n "$others" ]; then
+      msg="${seen}
+Release \`${tag}\` of \`${package}\` contains this pull request's module change: merge the update pull request #${upd} first, then merge \`main\` into this branch. The module part then disappears from this pull request and the rest ($(echo $others | sed 's/ /, /g')) is reviewed and merged as usual."
+      api POST "/repos/${repo}/issues/${n}/comments" "$(jq -n --arg b "$msg" '{body:$b}')" >/dev/null || warn "$repo#$n: comment failed"
+      log "$repo#$n: module change released, other files changed too: left open, commented"
+    else
+      msg="${seen}
+Superseded by #${upd}: release \`${tag}\` of \`${package}\` contains this change. Merge #${upd} to bring it into \`main\`.
+
+Closed automatically by the Release job, and the branch \`${head}\` was deleted (*Restore branch* on this page brings it back)."
+      api POST "/repos/${repo}/issues/${n}/comments" "$(jq -n --arg b "$msg" '{body:$b}')" >/dev/null \
+        && api PATCH "/repos/${repo}/pulls/${n}" '{"state":"closed"}' >/dev/null \
+        && log "$repo#$n: superseded by #${upd}: closed" || warn "$repo#$n: could not close"
+      api DELETE "/repos/${repo}/branches/$(printf '%s' "$head" | jq -sRr @uri)" >/dev/null && log "$repo: deleted branch $head" || true
+    fi
+    rm -f "$pdiff"
+  done < <(api GET "/repos/${repo}/pulls?state=open&limit=50" | jq -r --arg b "$branch" '.[]|select(.head.ref!=$b)|"\(.number) \(.head.ref)"')
+}
+
 mapfile -t repos < <(api GET "/repos/search?topic=true&q=${TOPIC}&limit=100" | jq -r '.data[].full_name')
 log "projects with topic '$TOPIC': ${#repos[@]}"
 rc=0
@@ -81,6 +119,7 @@ BODY
 )
   pr=$(api POST "/repos/${repo}/pulls" "$(jq -n --arg t "Update ${package} to ${ver}" --arg b "$body" --arg h "$branch" '{title:$t,body:$b,head:$h,base:"main"}')" | jq -r .number)
   log "opened ${repo}#${pr}: ${GITEA_URL}/${repo}/pulls/${pr}"
+  supersede "$repo" "$pr" "$path"
   echo "::endgroup::"
 done
 exit $rc

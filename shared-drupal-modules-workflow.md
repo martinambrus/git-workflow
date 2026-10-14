@@ -176,7 +176,7 @@ Merge through the usual project merge request. While a module is on 0.x, `^0.1` 
 
 **6.4 Push the project branch** so that Dev B can pick it up: `git push -u origin feature/promo-banner`.
 
-**6.5 The Upstream job sends the module changes.** Every push to a project branch runs it (section 12). It compares each of our module folders with the release the project is locked to. If a folder differs, the job pushes the difference to a bot branch in the module repository (`up/shop-a/feature-promo-banner`), opens or updates a merge request there and comments its link on the project's pull request. The merge request targets `1.x` or `main`, chosen from the locked version, holds one cumulative commit and lists the project commits and their authors in its description. If nothing differs, the job does nothing.
+**6.5 The Upstream job sends the module changes.** Every push to a project branch runs it (section 12). It compares each of our module folders with the release the project is locked to. If a folder differs, the job pushes the difference to a bot branch in the module repository (`up/shop-a/feature-promo-banner`), opens or updates a merge request there and comments its link on the project's pull request, with what happens next: the project pull request is not merged (its Checks fail on purpose, see 6.6); the change comes back as a release and that pull request is then closed automatically (section 9). The job also runs when the project pull request is opened. The merge request targets `1.x` or `main`, chosen from the locked version, holds one cumulative commit and lists the project commits and their authors in its description. If nothing differs, the job does nothing.
 
 - Re-running is safe: the job rebuilds the bot branch from scratch every time, so there is nothing to keep track of, and a second developer's push simply updates the same merge request.
 - Answer review comments by changing the project and pushing again. Never commit to a bot branch (`up/...`) by hand: the next push rebuilds it.
@@ -196,7 +196,7 @@ Merge through the usual project merge request. While a module is on 0.x, `^0.1` 
 
 ## 8. Review and release (Main dev)
 
-**8.1 Review and merge.** Review the module merge request the bot opened, check that module CI is green and merge it into `main` (or into `1.x` if that is its target). Requests for changes go back to the developer, who changes the project and pushes again.
+**8.1 Review and merge.** Review the module merge request the bot opened, check that module CI is green and merge it into `main` (or into `1.x` if that is its target). Requests for changes go back to the developer, who changes the project and pushes again. When a merge request from the Upstream job is merged, a reminder comment on it names the next version and how to tag it, and the project's pull request is told that its change waits for that release.
 
 **8.2 Pick the version.** Patch (`1.0.1`) for bug fixes, minor (`1.1.0`) for backwards-compatible features, major (`2.0.0`) for breaking changes or for dropping a Drupal core version, which also starts a new release line (section 11).
 
@@ -215,7 +215,7 @@ Only main devs can create `v*` tags (protected tags). The tag push does two thin
 
 **Which projects get update pull requests.** Projects with the repository topic `activit-project`: every new project from the start of the Elmont project, and existing projects once they are refactored or migrated to this workflow. Nothing else is opted in at the start.
 
-**Update pull requests.** After a release, the Update PRs job opens an `update/ait_demo-1.1.0` pull request in every project that carries the topic. It runs `composer update activit/ait_demo`, commits everything including `vendor/` and `composer.lock`, and opens the request; a reviewer then does steps 9.3 and 9.4 below. Frozen or out-of-support projects simply have no such topic. Until the job exists, or when you want to update by hand, follow all the steps below, per project, on a clean working tree.
+**Update pull requests.** After a release, the Update PRs job opens an `update/ait_demo-1.1.0` pull request in every project that carries the topic. It runs `composer update activit/ait_demo`, commits everything including `vendor/` and `composer.lock`, and opens the request; a reviewer then does steps 9.3 and 9.4 below. Frozen or out-of-support projects simply have no such topic. In the same run, an open project pull request whose in-place module change the release now contains, and that changes nothing else, is closed with a link to the update pull request and its branch is deleted; if it also changes other files, it gets a comment to merge the update first and then merge `main` into its branch. Until the job exists, or when you want to update by hand, follow all the steps below, per project, on a clean working tree.
 
 **9.1 Where to start.** In the project where the change was developed, stay on the feature branch. In any other project, start from main:
 

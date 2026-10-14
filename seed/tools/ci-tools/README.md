@@ -56,3 +56,13 @@ scenarios: a project on 1.x could not send a fix once `main` had moved to 2.0.0)
 | Script | Run in | What it does |
 | --- | --- | --- |
 | `bin/forward-port.sh` | module repo, push to a maintenance branch `<N>.x` | cherry-picks each new first-parent commit (a merged MR is taken with `-m 1`) onto the **next higher** `<M>.x`, or the default branch if there is none, on `fwd/<src>/<sha>-to-<target>`, and opens a PR. Merging that PR triggers the next hop (1.x -> 2.x -> main). Already-applied changes are skipped; a conflict opens an issue naming the files and fails the job. Idempotent (a marker in the PR/issue body). |
+
+## Guided in-place edits (v1.5.0)
+
+| Script | Run in | What it does |
+| --- | --- | --- |
+| `bin/upstream.sh` | project repo, every push and when a PR is opened | its comment on the project PR now says "do not merge" and lists what happens next; the module MR body carries an `upstream-source` marker |
+| `bin/release-reminder.sh` | module repo, `pull_request: closed` | for a merged `up/...` MR: comment the next patch version (from `git describe` on the target line) with CLI and web-UI tag steps; tell the project PR |
+| `bin/update-prs.sh` | called by Release | after opening an update PR: close project PRs (with the Upstream marker) whose own module diff reverse-applies to the release and that change nothing else, deleting their branch; otherwise comment what to do |
+| `bin/check-project.sh` | project repo | a strict drift failure in our own modules points to the Upstream comment |
+

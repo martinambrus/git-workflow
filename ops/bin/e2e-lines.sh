@@ -202,6 +202,8 @@ d=$WORK/fix; git clone -q "$(dev_url "$SITE_ORG/$P_OLD")" "$d" 2>/dev/null
 ( cd "$d" && git config user.name "Dev One" && git config user.email dev@example.test && git switch -q -c "fix/1x-$ts" \
   && echo "/* $ts: 1.x fix */" >> "vendor/$PBASE/css/banner.css" && git commit -qam "Fix on the 1.x line" && git push -q origin "fix/1x-$ts" ) >/dev/null 2>&1
 bot_branch="up/$P_OLD/fix-1x-$ts"
+ppr=$(api POST "/repos/$SITE_ORG/$P_OLD/pulls" "$(jq -n --arg h "fix/1x-$ts" '{title:"Fix on the 1.x line",head:$h,base:"main"}')" | jq -r .number)
+[ -n "$ppr" ] && [ "$ppr" != null ] && ok "project PR $P_OLD#$ppr opened (the developer's view)" || bad "could not open the project PR"
 wait_for 600 "Upstream MR" bash -c ". '$LAB_ROOT/ops/bin/lib.sh'; [ -n \"\$(api GET '/repos/$PBASE/pulls?state=open&limit=50' | jq -r '.[]|select(.head.ref==\"$bot_branch\")|.number')\" ]" \
   && ok "Upstream opened a merge request in $PBASE" || die "no Upstream MR from the 1.x project"
 mr=$(open_pr_number "$PBASE" "$bot_branch")
@@ -209,6 +211,11 @@ mr=$(open_pr_number "$PBASE" "$bot_branch")
   || bad "MR #$mr targets $(api GET "/repos/$PBASE/pulls/$mr" | jq -r .base.ref), expected 1.x"
 wait_for 600 "module Checks on the MR" is_success "$PBASE" "$bot_branch" && ok "module Checks ran and passed on a PR into 1.x" || bad "Checks on the 1.x MR: $(pr_status "$PBASE" "$bot_branch")"
 merge_pr "$PBASE" "$mr" && ok "MR merged into 1.x" || die "cannot merge the 1.x MR"
+comments_of() { api GET "/repos/$1/issues/$2/comments?limit=100" | jq -r '[.[].body]|join("\n")'; }
+wait_for 300 "release reminder on MR #$mr" bash -c ". '$LAB_ROOT/ops/bin/lib.sh'; api GET '/repos/$PBASE/issues/$mr/comments' | grep -q 'release-reminder'" \
+  && comments_of "$PBASE" "$mr" | grep -q 'tags \*\*`v1.0.2`\*\* on `1.x`' && ok "release reminder on MR #$mr suggests v1.0.2 on 1.x" \
+  || bad "no (correct) release reminder on MR #$mr: $(comments_of "$PBASE" "$mr" | head -3 | tr '\n' ' ')"
+[ -n "$ppr" ] && { comments_of "$SITE_ORG/$P_OLD" "$ppr" | grep -q "upstream-merged:$PBASE#$mr" && ok "project PR #$ppr was told its change is merged and waits for the release" || bad "project PR #$ppr got no 'merged' notice"; }
 fp=$(wait_pr "$PBASE" "fwd/1.x/" 2.x 300) && ok "Forward-port job opened PR #$fp: 1.x -> 2.x (the next higher line, not main)" || { bad "no forward-port PR from 1.x"; fp=; }
 if [ -n "$fp" ]; then
   merge_forward_pr "$PBASE" "$fp" && ok "forward-port PR #$fp passed Checks and merged into 2.x" || bad "forward-port PR #$fp not merged"
@@ -223,6 +230,11 @@ for p in "$P_EXP" "$P_NEW" "$P_PIN"; do
   pr_exists "$SITE_ORG/$p" "update/$BASE-1.0.2" && bad "$p got an update PR for 1.0.2" || ok "$p: no update PR for 1.0.2 ($(case $p in *exp) echo support expired;; *new) echo on 2.0;; *pin) echo pinned;; esac))"
 done
 n=$(open_pr_number "$SITE_ORG/$P_OLD" "update/$BASE-1.0.2")
+if [ -n "$ppr" ]; then
+  [ "$(api GET "/repos/$SITE_ORG/$P_OLD/pulls/$ppr" | jq -r '.state')" = closed ] && comments_of "$SITE_ORG/$P_OLD" "$ppr" | grep -q "Superseded by #$n" \
+    && ok "project PR #$ppr closed automatically: superseded by update PR #$n" || bad "project PR #$ppr not closed as superseded"
+  [ "$(http_code GET "/repos/$SITE_ORG/$P_OLD/branches/fix%2F1x-$ts")" = 404 ] && ok "its branch fix/1x-$ts was deleted" || bad "branch fix/1x-$ts still exists"
+fi
 if [ -n "$n" ]; then
   wait_for 1200 "Checks on update PR" is_success "$SITE_ORG/$P_OLD" "update/$BASE-1.0.2" && ok "$P_OLD#$n: Checks green" || bad "$P_OLD#$n: Checks not green"
   merge_pr "$SITE_ORG/$P_OLD" "$n" && ok "$P_OLD#$n merged" || bad "$P_OLD#$n merge refused"

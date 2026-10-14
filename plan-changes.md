@@ -126,6 +126,16 @@ locked tag" to the test list. *Evidence:* F29, e2e L6.
 **12 (part). Target branch (CLARIFY, 6.5).** The plan says "1.x if that branch exists, otherwise main"; the working rule
 is **`<locked major>.x` if that branch exists, else `main`**. Verified for `1.x` and for `2.x`. *Evidence:* F30, e2e L6, L9.
 
+
+**24. Guide the in-place edit flow (ADD, 6.5, 8.1, 9).** A developer who edits a module inside a project has a project
+PR that must never be merged, and nothing told them so; after the release they had to know to close it. *Change:*
+(a) the Upstream job's comment on the project PR says "do not merge" and lists the three steps that follow; the
+failing drift check points to it; the job also runs when the PR is opened (F37); (b) when a merge request from the
+Upstream job is merged, a `release-reminder` job comments the next version and how to tag it, and tells the project
+PR; (c) the Update PRs job closes project PRs whose module change the release contains (the PR's own module diff
+reverse-applies to the release) and that change nothing else, deleting their branch; otherwise it comments what to do.
+*Evidence:* F38 (ci-tools v1.5.0), e2e step 3 and L6.
+
 ### Section 8 and 9 (release, apply a release)
 
 **15. 9.3 wording (CLARIFY).** "In the project that developed the change the module folder should hardly change" holds

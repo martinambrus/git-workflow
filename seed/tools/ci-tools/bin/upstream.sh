@@ -110,8 +110,8 @@ for entry in "${mods[@]}"; do
 
   # --- merge request in the module repo ---------------------------------------------------------------------
   title="Changes from ${project}: ${BRANCH}"
-  body=$(printf 'Sent by the Upstream job from `%s` branch `%s` (locked to `%s`).\n\nProject commits touching `%s`:\n\n%s\n\nThe branch is rebuilt on every push of the project branch. Do not commit to it by hand.\n' \
-         "$REPOSITORY" "$BRANCH" "$version" "$path" "$msg")
+  body=$(printf '<!-- upstream-source: %s %s -->\nSent by the Upstream job from `%s` branch `%s` (locked to `%s`).\n\nProject commits touching `%s`:\n\n%s\n\nThe branch is rebuilt on every push of the project branch. Do not commit to it by hand.\nAfter merging, tag the next release on `%s`: the project then gets an update pull request.\n' \
+         "$REPOSITORY" "$BRANCH" "$REPOSITORY" "$BRANCH" "$version" "$path" "$msg" "$target")
   existing=$(api GET "/repos/${MODULE_ORG}/${short}/pulls?state=open&limit=50" | jq -r --arg h "$bot_branch" '.[]|select(.head.ref==$h)|.number' | head -1)
   if [ -n "$existing" ]; then
     api PATCH "/repos/${MODULE_ORG}/${short}/pulls/${existing}" "$(jq -n --arg t "$title" --arg b "$body" '{title:$t,body:$b}')" >/dev/null
@@ -130,7 +130,19 @@ for entry in "${mods[@]}"; do
     if api GET "/repos/${REPOSITORY}/issues/${pr}/comments" | jq -e --arg m "$marker" '.[]|select(.body|contains($m))' >/dev/null; then
       log "project pull request #${pr} already links the merge request"
     else
-      api POST "/repos/${REPOSITORY}/issues/${pr}/comments" "$(jq -n --arg b "${marker}"$'\n'"Module changes to \`${name}\` were sent upstream: ${mr_url}" '{body:$b}')" >/dev/null
+      note=$(cat <<NOTE
+${marker}
+**Do not merge this pull request.** It changes the shared module \`${name}\`, so the Upstream job sent the change to the module repository as ${mr_url} (target \`${target}\`). The Checks of this pull request fail on purpose: unreleased module code never reaches \`main\`.
+
+What happens next (nothing to do for you unless the review asks for changes):
+1. A main dev reviews and merges ${mr_url}. Every further push to this branch updates it.
+2. A main dev tags the next release on \`${target}\`.
+3. The Release job opens an update pull request here. It brings your change back as a release, and **this pull request is then closed automatically**.
+
+If this pull request also changes files outside \`${path}\`, it is not closed: merge the update pull request first, then merge \`main\` into this branch; the module part disappears and the rest is reviewed and merged as usual.
+NOTE
+)
+      api POST "/repos/${REPOSITORY}/issues/${pr}/comments" "$(jq -n --arg b "$note" '{body:$b}')" >/dev/null
       log "commented on project pull request #${pr}"
     fi
   fi

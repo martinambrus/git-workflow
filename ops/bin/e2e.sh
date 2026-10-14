@@ -92,20 +92,28 @@ links() { api GET "/repos/sites/shop-a/issues/$ppr/comments" | jq --arg u "/$MOD
 wait_for 300 "link comment on sites/shop-a#$ppr" bash -c ". '$LAB_ROOT/ops/bin/lib.sh'; [ \"\$(api GET '/repos/sites/shop-a/issues/$ppr/comments' | jq '[.[]|select(.body|contains(\"/pulls/$mr\"))]|length')\" -ge 1 ]" \
   && [ "$(links)" = 1 ] && ok "project PR #$ppr links MR #$mr exactly once" || bad "project PR #$ppr has $(links) link comments (expected 1)"
 merge_pr "$MODULE_ORG/ait_banners" "$mr" && ok "MR #$mr merged by the main dev" || die "merge refused"
+wait_for 300 "release reminder on MR #$mr" bash -c ". '$LAB_ROOT/ops/bin/lib.sh'; api GET '/repos/$MODULE_ORG/ait_banners/issues/$mr/comments' | grep -q 'release-reminder'" \
+  && ok "release reminder posted on MR #$mr" || bad "no release reminder on MR #$mr"
+api GET "/repos/sites/shop-a/issues/$ppr/comments" | grep -q "upstream-merged:$MODULE_ORG/ait_banners#$mr" \
+  && ok "project PR #$ppr was told its change is merged" || bad "project PR #$ppr got no 'merged' notice"
 
 tmp=$(mktemp -d)
 git clone -q --depth 1 "http://$ADMIN:$ADMIN_PW@$GITEA_HOST:3000/$MODULE_ORG/ait_banners.git" "$tmp/m" \
   && git -C "$tmp/m" -c user.name="Main Dev" -c user.email=admin@example.test tag -a "v$next" -m "e2e release $next" \
   && git -C "$tmp/m" push -q origin "v$next" 2>/dev/null && ok "tagged v$next as the main dev" || die "could not tag"
 rm -rf "$tmp"
-api PATCH "/repos/sites/shop-a/pulls/$ppr" '{"state":"closed"}' >/dev/null   # its change comes back as the release
-git -C "$A" push -q origin --delete "$branch" 2>/dev/null; git -C "$A" branch -D "$branch" >/dev/null 2>&1
+git -C "$A" branch -D "$branch" >/dev/null 2>&1   # the remote branch is deleted by the Release job (superseded PR)
 
 upd="update/ait_banners-$next"
 for r in sites/shop-a sites/shop-b; do
   wait_for 600 "update PR in $r" bash -c ". '$LAB_ROOT/ops/bin/lib.sh'; [ -n \"\$(api GET '/repos/$r/pulls?state=open&limit=50' | jq -r '.[]|select(.head.ref==\"$upd\")|.number')\" ]" \
     && ok "Release job opened $upd in $r" || bad "no update PR in $r"
 done
+n=$(open_pr_number sites/shop-a "$upd")
+[ "$(api GET "/repos/sites/shop-a/pulls/$ppr" | jq -r .state)" = closed ] && api GET "/repos/sites/shop-a/issues/$ppr/comments" | grep -q "Superseded by #$n" \
+  && ok "project PR #$ppr closed automatically: superseded by update PR #$n" || bad "project PR #$ppr not closed as superseded"
+[ "$(http_code GET "/repos/sites/shop-a/branches/$(printf '%s' "$branch" | jq -sRr @uri)")" = 404 ] && ok "its branch $branch was deleted" \
+  || { bad "branch $branch still exists"; git -C "$A" push -q origin --delete "$branch" 2>/dev/null; }
 for r in sites/shop-a sites/shop-b; do
   n=$(open_pr_number "$r" "$upd"); [ -n "$n" ] || continue
   author=$(api GET "/repos/$r/pulls/$n" | jq -r .user.login)

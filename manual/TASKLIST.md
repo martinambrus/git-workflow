@@ -192,15 +192,16 @@ containing `dev` and `bot`; you hold a `BOT_TOKEN`.
   cp -a $REPO/seed/tools/ci-tools/. ci-tools/ && cd ci-tools
   git add -A && git commit -m "ci-tools: upstream, release, update-prs, checks, forward-port"
   git branch -M main && git push -u origin main
-  for t in v1.0.0 v1.1.0 v1.2.0 v1.3.0 v1.3.1 v1.4.0; do git tag -a $t -m "ci-tools $t"; done
+  for t in v1.0.0 v1.1.0 v1.2.0 v1.3.0 v1.3.1 v1.4.0 v1.5.0; do git tag -a $t -m "ci-tools $t"; done
   git push origin --tags
   ```
   ✅ the repo shows `bin/upstream.sh`, `bin/release.sh`, `bin/update-prs.sh`, `bin/check-project.sh`,
-  `bin/check-module.sh`, `bin/forward-port.sh`, and six tags. 📸
-  *Why six tags:* a tag is never moved; the workflow stubs pin `v1.1.0` (release), `v1.2.0` (checks), `v1.3.1`
-  (upstream) and `v1.4.0` (forward-port). In your own setup you would publish real versions.
+  `bin/check-module.sh`, `bin/forward-port.sh`, `bin/release-reminder.sh`, and seven tags. 📸
+  *Why seven tags:* a tag is never moved; the workflow stubs pin `v1.2.0` (module checks), `v1.4.0` (forward-port)
+  and `v1.5.0` (project checks, upstream, release, release reminder); the older tags are history. In your own setup
+  you would publish real versions.
 
-**Done when:** `git ls-remote --tags http://gitea.test:3000/activit/ci-tools.git` lists the six tags.
+**Done when:** `git ls-remote --tags http://gitea.test:3000/activit/ci-tools.git` lists the seven tags.
 
 ---
 
@@ -219,7 +220,7 @@ key, and name `activit/<repo>`.
   git clone http://admin:<password>@gitea.test:3000/activit/ait_banners.git
   cd ait_banners
   cp -a $REPO/seed/modules/ait_banners/. .
-  cp -a $REPO/seed/module-template/.gitea .          # the module's workflows: checks, release, forward-port
+  cp -a $REPO/seed/module-template/.gitea .          # the module's workflows: checks, release, forward-port, release-reminder
   git add -A && git commit -m "Initial module"
   git branch -M main && git push -u origin main
   ```
@@ -602,16 +603,39 @@ and implements the new hook; only **shop-b** gets it.
 *Plan 6 and 7.* The other direction: a developer fixes the module **inside shop-a** and the *Upstream* job turns it
 into a merge request in the module repo.
 
-- [ ] **12.1** In shop-a (on a branch): append a CSS comment to
-  `web/modules/custom/ait_banners/css/banner.css`, commit, push.
-- [ ] **12.2** ✅ The *Upstream* run (project → *Actions*) opens a merge request in `activit/ait_banners` from branch
-  `up/shop-a/<your-branch>` (slashes become dashes: `up/shop-a/fix-banner-css`); because shop-a is locked to a **1.x** release **and the branch `1.x` exists**, its
-  target is `1.x` (not `main`). Open the project PR: Upstream runs again
-  for it (it runs on push **and** when a PR is opened) and the PR gets **one** comment with the link. ⚠ A project
-  set up with an older `upstream.yml` (push only, README finding 37) gets the comment only with the next push. 📸 Merge it, tag the next `v1.1.x` on 1.x
-  (10.2): shop-a gets a normal update PR that brings the change back as a release; merge it and **close** the
-  project PR unmerged (its change is now in the release). The loop closes. ⚠ A project *cannot* merge to `main` while its module folder differs from the release
-  (Checks fail on PRs into `main`; plan 6.6). ⚠ Never commit to an `up/...` branch by hand.
+- [ ] **12.1 Edit the module inside shop-a** (as a developer would; a branch, then a PR):
+  ```bash
+  cd $REPO/workspace/shop-a &&
+  git switch main && git pull &&
+  git switch -c fix/banner-css &&
+  printf '/* Hotfix made inside shop-a. */\n' >> web/modules/custom/ait_banners/css/banner.css &&
+  git add -A && git commit -m "ait_banners: CSS note from shop-a" &&
+  git push -u origin fix/banner-css
+  ```
+  Open the PR into `main` in Gitea. **Do not merge it.**
+- [ ] **12.2 What the developer sees** (nothing to do but read):
+  - the *Upstream* run (it runs on the push **and** when the PR is opened) opened a merge request in
+    `activit/ait_banners` from `up/shop-a/fix-banner-css` (slashes become dashes) into **`1.x`**: shop-a is locked to
+    a 1.x release and the branch `1.x` exists;
+  - the project PR has **one** comment from `bot`: "**Do not merge this pull request** … What happens next: 1. a main
+    dev merges the module MR 2. tags the next release 3. the Release job opens an update PR here and closes this one";
+  - the project PR's Checks are **red** on purpose: "drift in our own modules … This is expected for an in-place
+    module change: do not merge" (plan 6.6). 📸 the comment and the red check.
+- [ ] **12.3 The main dev merges the module MR** (`activit/ait_banners` → the `up/shop-a/...` PR → Checks → merge).
+  ✅ The *release-reminder* run comments on the merged MR: "Merged into `1.x`, **not released yet** (latest release
+  on this line: `v1.1.x`) … tag **`v1.1.y`** on `1.x`", with the command line and the web-UI steps; and the project
+  PR gets "Your module change was merged … waits for a main dev to tag the release". 📸 both comments.
+  The Forward-port job opens its `fwd/1.x/...` PR into `main` as usual: merge it.
+- [ ] **12.4 Tag the suggested version on `1.x`** (as in 10.2, or in the web UI as in 5.4b). ✅ The Release job opens
+  shop-a's update PR **and closes the project PR** with "Superseded by #N: release `v1.1.y` … contains this change",
+  deleting its branch (*Restore branch* on the PR page brings it back). 📸 the closed PR. Merge the update PR: the
+  loop is closed, shop-a's module folder equals the release again (its Checks are green).
+  - If the project PR also changed files outside the module folder, it is **not** closed; the comment says to merge
+    the update PR, then merge `main` into the branch (the module part disappears). If it contains module changes
+    the release does not have (pushed after the MR was merged), it stays open and says so.
+  ⚠ Never commit to an `up/...` branch by hand: it is rebuilt on every push of the project branch.
+  ⚠ Projects and modules set up before ci-tools `v1.5.0` (README findings 37, 38) need the new workflow files first:
+  `upstream.yml` + `checks.yml` in the project, `release.yml` + `release-reminder.yml` on the module's release lines.
 
 ---
 
@@ -647,7 +671,7 @@ The workflow stubs in `seed/` contain these literally. Use them, or edit the stu
 | Users | `admin` (main dev: tags, release lines), `dev`, `bot` (automation) |
 | Org secrets (both orgs) | `BOT_TOKEN`, `PACKETON_TOKEN` |
 | Runner label | `activit-runner` |
-| ci-tools tags | `v1.1.0` release, `v1.2.0` checks, `v1.3.1` upstream, `v1.4.0` forward-port |
+| ci-tools tags | `v1.2.0` module checks, `v1.4.0` forward-port, `v1.5.0` project checks + upstream + release + release reminder |
 | Status check required on `main` and `[0-9]*.x` | `checks / checks (pull_request)` |
 | Opt-in topic for update PRs | `activit-project` |
 | Default branch | `main` |
@@ -657,7 +681,7 @@ The workflow stubs in `seed/` contain these literally. Use them, or edit the stu
 For every module repo (`ait_banners`, `ait_banners_ribbon`, ...):
 
 - [ ] repo in `activit`, Private; default branch `main`
-- [ ] seeded with the module files **and** `seed/module-template/.gitea` (checks, release, forward-port workflows)
+- [ ] seeded with the module files **and** `seed/module-template/.gitea` (checks, release, forward-port, release-reminder workflows)
 - [ ] protected tag pattern `v*`, allowed user `admin`
 - [ ] branch rule `main` (disable push; status `checks / checks (pull_request)`)
 - [ ] branch rule `[0-9]*.x` (push whitelist `admin`; same status check)
