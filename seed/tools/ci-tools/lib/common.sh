@@ -97,7 +97,9 @@ origin_of() {
 }
 
 # overview ORIGIN KEY TEXT -> one bot comment in the origin project pull request ("org/project#N") lists where its
-# change went (forward-ports, conflicts, releases); the line for KEY is replaced, or added
+# change went (forward-ports, conflicts, releases); the line for KEY is replaced, or added. On every update the comment
+# is posted anew at the end of the conversation and the old one is deleted, so the latest state is always the last
+# comment.
 overview() {
   local origin=$1 key=$2 text=$3 repo n c id body line mark="<!-- fp:$2 -->"
   [ -n "$origin" ] || return 0
@@ -117,7 +119,8 @@ ${line}"
     else
       body="${body}"$'\n'"${line}"
     fi
-    api PATCH "/repos/$repo/issues/comments/$id" "$(jq -n --arg b "$body" '{body:$b}')" >/dev/null || return 0
+    api POST "/repos/$repo/issues/$n/comments" "$(jq -n --arg b "$body" '{body:$b}')" >/dev/null || return 0
+    api DELETE "/repos/$repo/issues/comments/$id" >/dev/null || warn "$origin: old overview comment $id not deleted"
   fi
   log "overview in $origin: $text"
 }

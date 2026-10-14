@@ -215,6 +215,9 @@ Update PRs, Checks, protected branches, Packeton grants). 78 assertions:
     **v1.8.3**: the forward-port prompt asked for `/merge` in a repository whose default branch had no
     `commands.yml` yet (the ribbon upgrade, where that very PR brings it), and the reply silently did nothing. The
     Forward-port job now checks the default branch and then says "merge it with the button" instead.
+    **v1.8.4**: the overview comment was edited in place and so stayed where it was first posted, in the middle of the
+    thread, where it was missed on the instance; it is now posted again at the end on every update (the old copy is
+    deleted). Verified on a throwaway Gitea 28.1 with a team-member bot: one overview comment, always the last.
 
 ## Fresh-machine replay (verified)
 

@@ -99,3 +99,6 @@ scenarios: a project on 1.x could not send a fix once `main` had moved to 2.0.0)
 
 **v1.8.3:** the forward-port prompt says "merge with the button" while the default branch has no `commands.yml`
 (replies would do nothing there).
+
+**v1.8.4:** the overview comment in the project PR moves to the end of the conversation on every update (posted
+anew, the old copy deleted).

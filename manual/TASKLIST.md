@@ -192,16 +192,16 @@ containing `dev` and `bot`; you hold a `BOT_TOKEN`.
   cp -a $REPO/seed/tools/ci-tools/. ci-tools/ && cd ci-tools
   git add -A && git commit -m "ci-tools: upstream, release, update-prs, checks, forward-port"
   git branch -M main && git push -u origin main
-  for t in v1.0.0 v1.1.0 v1.2.0 v1.3.0 v1.3.1 v1.4.0 v1.5.0 v1.6.0 v1.7.0 v1.8.0 v1.8.1 v1.8.2 v1.8.3; do git tag -a $t -m "ci-tools $t"; done
+  for t in v1.0.0 v1.1.0 v1.2.0 v1.3.0 v1.3.1 v1.4.0 v1.5.0 v1.6.0 v1.7.0 v1.8.0 v1.8.1 v1.8.2 v1.8.3 v1.8.4; do git tag -a $t -m "ci-tools $t"; done
   git push origin --tags
   ```
   ✅ the repo shows `bin/upstream.sh`, `bin/release.sh`, `bin/update-prs.sh`, `bin/check-project.sh`,
-  `bin/check-module.sh`, `bin/forward-port.sh`, `bin/release-reminder.sh`, `bin/commands.sh`, and thirteen tags. 📸
-  *Why thirteen tags:* a tag is never moved; the workflow stubs pin `v1.2.0` (module checks) and `v1.8.3` (everything
+  `bin/check-module.sh`, `bin/forward-port.sh`, `bin/release-reminder.sh`, `bin/commands.sh`, and fourteen tags. 📸
+  *Why fourteen tags:* a tag is never moved; the workflow stubs pin `v1.2.0` (module checks) and `v1.8.4` (everything
   else: project checks, upstream, commands, release, release reminder, forward-port); the older tags are history. In
   your own setup you would publish real versions.
 
-**Done when:** `git ls-remote --tags http://gitea.test:3000/activit/ci-tools.git` lists the thirteen tags.
+**Done when:** `git ls-remote --tags http://gitea.test:3000/activit/ci-tools.git` lists the fourteen tags.
 
 ---
 
@@ -639,8 +639,9 @@ into a merge request in the module repo.
   The Forward-port job opens its `fwd/1.x/...` PR into `main` with a prompt: reply there **`/release v2.0.y`** to merge
   it and release it for the 2.x projects at once (the bot tags the merge commit and lists what the release contains;
   shop-b then gets its update PR), or `/merge` to merge only (then the bot asks for `/release` on the merged PR). 📸
-  Back in shop-a's PR, a bot comment **"Where this change went"** lists every forward-port of the change and keeps
-  its state up to date: open, merged, **released as `v2.0.y`**, or "does not apply cleanly" (with the issue). 📸
+  Back in shop-a's PR, a bot comment **"Where this change went"** lists every forward-port of the change with its
+  state: open, merged, **released as `v2.0.y`**, or "does not apply cleanly" (with the issue). On every change it is
+  posted again as the **last** comment of the PR (the previous copy is deleted). 📸
   ⚠ If another in-place change to the **same lines** was merged into `1.x` since shop-a's release, `/merge` reports
   that Gitea refused the merge: the main dev resolves the conflict in the module MR. Ignore "This branch is
   out-of-date with the base branch" there: the bot branch is cut from the locked release on purpose.
@@ -661,9 +662,9 @@ into a merge request in the module repo.
   If the PR conflicts with `main` after the update (`main` changed `composer.lock` meanwhile), the bot comments the
   exact commands to fix it (take main's version of the conflicted Composer files, `composer update <module>`).
   ⚠ Never commit to an `up/...` branch by hand: it is rebuilt on every push of the project branch.
-  ⚠ Projects and modules set up before ci-tools `v1.8.3` (README findings 37–41) need the new workflow files first:
+  ⚠ Projects and modules set up before ci-tools `v1.8.4` (README findings 37–41) need the new workflow files first:
   `upstream.yml` + `checks.yml` + `commands.yml` in the project; `release.yml`, `release-reminder.yml`,
-  `forward-port.yml` and `commands.yml` on the module's release lines (ci-tools `v1.8.3`); and `bot` on the module's
+  `forward-port.yml` and `commands.yml` on the module's release lines (ci-tools `v1.8.4`); and `bot` on the module's
   protected-tag list.
   Replies (`/merge`, `/release`) run the `commands.yml` of the repo's **default branch** (`main`): until it is there,
   a reply does nothing at all (no run, no answer). Merge the forward-port PR that carries the new workflows to `main`
@@ -702,7 +703,7 @@ The workflow stubs in `seed/` contain these literally. Use them, or edit the stu
 | Users | `admin` (main dev: tags, release lines), `dev`, `bot` (automation) |
 | Org secrets (both orgs) | `BOT_TOKEN`, `PACKETON_TOKEN` |
 | Runner label | `activit-runner` |
-| ci-tools tags | `v1.2.0` module checks, `v1.8.3` everything else (project checks, upstream, commands, release, release reminder, forward-port) |
+| ci-tools tags | `v1.2.0` module checks, `v1.8.4` everything else (project checks, upstream, commands, release, release reminder, forward-port) |
 | Status check required on `main` and `[0-9]*.x` | `checks / checks (pull_request)` |
 | Opt-in topic for update PRs | `activit-project` |
 | Default branch | `main` |
