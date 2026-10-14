@@ -1,0 +1,23 @@
+name: commands
+# Main devs reply in a project pull request with `/merge <org>/<module>#<n>` or `/release <org>/<module> v<x.y.z>`
+# (the bot's comments say which); ci-tools checks who asked and does it. The comment is read by its id through the
+# API, never pasted into the shell. Plain shell steps from ci-tools, no `uses:` (plan 2.4).
+on:
+  issue_comment:
+    types: [created]
+
+jobs:
+  commands:
+    if: startsWith(github.event.comment.body, '/merge ') || startsWith(github.event.comment.body, '/release ')
+    runs-on: activit-runner
+    steps:
+      - name: Command
+        env:
+          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+        run: |
+          set -euo pipefail
+          git clone -q --depth 1 --branch v1.7.0 \
+            "http://bot:${BOT_TOKEN}@gitea.test:3000/activit/ci-tools.git" /tmp/ci-tools
+          export GITEA_URL="${{ github.server_url }}" REPOSITORY="${{ github.repository }}" \
+                 PR="${{ github.event.issue.number }}" COMMENT_ID="${{ github.event.comment.id }}"
+          /tmp/ci-tools/bin/commands.sh

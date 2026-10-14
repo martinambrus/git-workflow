@@ -74,3 +74,10 @@ scenarios: a project on 1.x could not send a fix once `main` had moved to 2.0.0)
 | `bin/upstream.sh` | no merge request when the target line already contains the change (merged, not released); the project PR comment says so |
 | comments | "Do not merge this pull request yet … the Release job adds the release to this pull request" |
 
+## Commands in the project PR (v1.7.0)
+
+| Script | Run in | What it does |
+| --- | --- | --- |
+| `bin/commands.sh` | project repo, `issue_comment` (`commands.yml`) | `/merge <org>/<module>#<n>`: merge the module MR the Upstream job opened for this PR (Checks green); `/release <org>/<module> v<x.y.z>`: tag it on the project's line (`<major>.x` or `main`). Main devs only (Owners team of the module org); the comment is read by id, never interpolated into a shell |
+| `lib/common.sh` | | `next_version` (next patch on a line), `is_main_dev` (Owners team membership) |
+

@@ -168,6 +168,24 @@ Update PRs, Checks, protected branches, Packeton grants). 78 assertions:
     `apply_to_admins` field does not exist in Gitea 28.1). All on a throwaway Gitea 28.1 + Packeton + act_runner with
     a team-member bot, in four rounds: in place (+ no duplicate MR), push rejected, two PRs, conflict with `main`.
 
+40. **Driving the module side from the project PR** (the developer's PR was still a round trip through the module repo
+    for the main dev). ci-tools **v1.7.0**: project workflow `commands.yml` (`issue_comment: created`, only for
+    comments starting with `/merge ` or `/release `) runs `bin/commands.sh`, which reads the comment **by id through
+    the API** (its text never reaches a shell command) and accepts `/merge activit/<module>#<n>` (only the MR the
+    Upstream job opened for this PR: branch `up/<project>/<branch>`, open, Checks green) and `/release
+    activit/<module> v<x.y.z>` (only a module this PR changes, only the project's own major line, a new version newer
+    than the latest on that line, and only when the line has something new; tagged through the API on `<major>.x` or
+    `main`). Who may: members of the module org's **Owners** team; Gitea lets only repo admins read other users'
+    permissions, so the team is the check the bot can make. Every command gets an answer. The bot is added to the
+    `v*` protected-tag list (it tags only on such a command; without it `/release` answers with the manual command).
+    *Trade-off:* any workflow with the org secret `BOT_TOKEN` can now create release tags; keep the bot off the tag
+    list if that is not acceptable. Verified on a throwaway Gitea 28.1 + Packeton + act_runner: `issue_comment`
+    fires for PR comments and runs the workflow from the default branch; `/merge` by `dev` refused; `/merge` by
+    `admin` merged as `bot` into the protected `1.x`; the reminder asked for `/release … v1.1.8`; `v1.1.6` (exists),
+    `v1.2` (syntax), another project's MR, an unrelated module, another major line all refused; `v1.1.8` tagged on
+    `1.x` and added to the PR, which went green and merged; with the bot off the tag list the manual command came back.
+    The lab's tag rule now lists `admin` and `bot`, and `./lab smoke` checks that `dev` cannot tag.
+
 ## Fresh-machine replay (verified)
 
 Done from a plain `git clone` of this repository on a machine that had been wiped of every lab container, volume,
@@ -310,7 +328,10 @@ Since ci-tools v1.5.0 the comment tells the developer not to merge the project P
 merged Upstream merge request gets a release reminder (`release-reminder.yml`, next version + how to tag) (finding 38).
 Since v1.6.0 the Release job adds the release **to the developer's own PR** (one `composer update` commit on its
 branch), which then turns green and is merged; it falls back to a separate update PR when that is not safe, and the
-Upstream job opens no second merge request for a change that is already merged but not released (finding 39). The integrity check (module branch ==
+Upstream job opens no second merge request for a change that is already merged but not released (finding 39).
+Since v1.7.0 the main devs drive it from the project PR: the bot's comments end with the exact reply, `/merge
+activit/<module>#<n>` (the bot merges the module MR) and then `/release activit/<module> v<x.y.z>` (the bot tags it;
+`commands.yml`, `bin/commands.sh`); only members of the module org's Owners team may run them (finding 40). The integrity check (module branch ==
 project folder) runs **before** the push. Re-running is safe.
 
 Verified here: `shop-a` branch `feature/promo-banner` (in-place edit of `ait_banners` locked to `v1.0.1`) produced

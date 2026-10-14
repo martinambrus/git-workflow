@@ -5,7 +5,7 @@
 set -uo pipefail
 . "$(dirname "$0")/lib.sh"
 load_secrets
-export BOT_TOKEN PACKETON_TOKEN
+export BOT_TOKEN PACKETON_TOKEN DEV_TOKEN
 G=$GITEA/api/v1
 P=$PACKETON
 adm() { curl -sS -u admin:admin12345 -H 'Content-Type: application/json' "$@"; }
@@ -15,7 +15,7 @@ ok()  { echo "  OK    $*"; }
 bad() { echo "  FAIL  $*"; FAILED=1; }
 check() { local d=$1; shift; if "$@"; then ok "$d"; else bad "$d"; fi; }
 has() { [[ $1 == *$2* ]]; }   # has "<haystack>" "<needle>"
-RUN() { docker run --rm --network wf-net -e BOT_TOKEN -e PACKETON_TOKEN activit-runner:local bash -c "$1"; }
+RUN() { docker run --rm --network wf-net -e BOT_TOKEN -e PACKETON_TOKEN -e DEV_TOKEN activit-runner:local bash -c "$1"; }
 versions() { pk "$P/packages/activit/smoke_module.json?username=admin&apiToken=$PACKETON_TOKEN" 2>/dev/null | jq -r '.package.versions // {} | keys[]' 2>/dev/null | sort | tr '\n' ' '; }
 
 if [ "${1:-}" = clean ]; then
@@ -31,7 +31,7 @@ ensure_tag_protection "$MODULE_ORG" smoke_module
 ensure_pkg_hook smoke_module
 check "hook exists" bash -c "curl -s -u admin:admin12345 $G/repos/activit/smoke_module/hooks | jq -e 'length>0' >/dev/null"
 
-echo "== 2. push module, tag v1.0.0 (admin); tag as bot must be refused"
+echo "== 2. push module, tag v1.0.0 (admin); tag as dev must be refused"
 out=$(RUN '
 set -e
 rm -rf /tmp/m && mkdir /tmp/m && cd /tmp/m && git init -q -b main && git config user.email a@a.test && git config user.name admin
@@ -56,11 +56,11 @@ git add -A && git commit -qm "Initial module" && git tag -a v1.0.0 -m first
 git push -q "http://admin:admin12345@gitea.test:3000/activit/smoke_module.git" main v1.0.0
 echo y > y.md && git add y.md && git commit -qm y && git tag -a v9.9.9 -m nope
 set +e
-git push "http://bot:$BOT_TOKEN@gitea.test:3000/activit/smoke_module.git" v9.9.9 >/tmp/botpush.log 2>&1
-[ $? -ne 0 ] && echo BOT_TAG_REFUSED || echo BOT_TAG_ALLOWED
+git push "http://dev:$DEV_TOKEN@gitea.test:3000/activit/smoke_module.git" v9.9.9 >/tmp/devpush.log 2>&1
+[ $? -ne 0 ] && echo DEV_TAG_REFUSED || echo DEV_TAG_ALLOWED
 ' 2>&1)
-check "admin pushed main + v1.0.0" bash -c "! grep -q 'fatal\|error:' <<<'$out' || grep -q BOT_TAG <<<'$out'"
-check "bot cannot create v* tag (protected tags)" grep -q BOT_TAG_REFUSED <<<"$out"
+check "admin pushed main + v1.0.0" bash -c "! grep -q 'fatal\|error:' <<<'$out' || grep -q DEV_TAG <<<'$out'"
+check "dev cannot create v* tag (protected tags)" grep -q DEV_TAG_REFUSED <<<"$out"
 
 echo "== 3. register package in Packeton, then watch for the version"
 register_package smoke_module

@@ -47,7 +47,7 @@ To ship it, a main dev tags **\`${next}\`** on \`${BASE_REF}\` (a minor version 
 - command line: \`git fetch origin && git switch ${BASE_REF} && git pull && git tag -a ${next} -m "${next#v}" && git push origin ${next}\`
 - web UI: *Code* → branch dropdown → **\`${BASE_REF}\`** → open it again → *Tags* → type \`${next}\` → *Create tag ${next}* (check the branch first: the tag is cut from the branch you are on)
 
-The Release job then adds the release to the project's pull request (one bot commit), which can then be merged; other projects get update pull requests.
+Or reply \`/release ${REPOSITORY} ${next}\` in the project's pull request and the bot tags it. The Release job then adds the release to that pull request (one bot commit), which can then be merged; other projects get update pull requests.
 MSG
 )
 api POST "/repos/${REPOSITORY}/issues/${PR}/comments" "$(jq -n --arg b "$msg" '{body:$b}')" >/dev/null
@@ -57,7 +57,11 @@ if [ -n "$src_pr" ]; then
   pmarker="<!-- upstream-merged:${REPOSITORY}#${PR} -->"
   if ! api GET "/repos/${src_repo}/issues/${src_pr}/comments?limit=100" | jq -e --arg m "$pmarker" '.[]|select(.body|contains($m))' >/dev/null; then
     pmsg="${pmarker}
-Your module change was merged: ${GITEA_URL}/${REPOSITORY}/pulls/${PR} (into \`${BASE_REF}\`). It now waits for a main dev to tag the release (\`${next}\` suggested); the Release job then adds it to this pull request, and you can merge it."
+Module change merged: ${GITEA_URL}/${REPOSITORY}/pulls/${PR} (into \`${BASE_REF}\`), not released yet.
+
+**Main devs:** reply here with
+\`/release ${REPOSITORY} ${next}\`
+(or tag \`${next}\` on \`${BASE_REF}\` yourself: see ${GITEA_URL}/${REPOSITORY}/pulls/${PR})"
     api POST "/repos/${src_repo}/issues/${src_pr}/comments" "$(jq -n --arg b "$pmsg" '{body:$b}')" >/dev/null \
       && log "${src_repo}#${src_pr}: told the project pull request" || warn "could not comment on ${src_repo}#${src_pr}"
   fi

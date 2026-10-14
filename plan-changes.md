@@ -136,7 +136,9 @@ PR; (c) the Release job adds the release to the developer's own PR (one `compose
 that PR turns green and is merged; it falls back to a separate update PR (closing superseded module-only PRs) when
 several PRs change the module, the branch moved, or the change is not fully released; (d) the Upstream job opens no
 second merge request for a change that is merged but not released; (e) protection rules block admins from
-force-merging red PRs. *Evidence:* F38 (v1.5.0), F39 (v1.6.0), e2e step 3 and L6.
+force-merging red PRs; (f) main devs reply `/merge …` and `/release …` in the project PR and the bot
+merges the module MR and tags the release (Owners team only). *Evidence:* F38 (v1.5.0), F39 (v1.6.0), F40 (v1.7.0),
+e2e step 3 and L6.
 
 ### Section 8 and 9 (release, apply a release)
 

@@ -52,9 +52,11 @@ ensure_repo() { local org=$1 name=$2 src=${3:-}
 }
 
 # Only main devs may create release tags (plan 2.1: protected tags v*)
+# ensure_tag_protection ORG NAME -> only the main dev and the bot (which tags only on a main dev's /release command in
+# a project PR, ci-tools v1.7.0) may create v* tags
 ensure_tag_protection() { local org=$1 name=$2
   api GET "/repos/$org/$name/tag_protections" | jq -e '.[]|select(.name_pattern=="v*")' >/dev/null 2>&1 ||
-    api POST "/repos/$org/$name/tag_protections" "{\"name_pattern\":\"v*\",\"whitelist_usernames\":[\"$ADMIN\"]}" >/dev/null
+    api POST "/repos/$org/$name/tag_protections" "{\"name_pattern\":\"v*\",\"whitelist_usernames\":[\"$ADMIN\",\"$BOT\"]}" >/dev/null
 }
 
 # Per-repository hook -> Packeton (an org-wide hook does not work with Gitea 28 + Packeton, see README)

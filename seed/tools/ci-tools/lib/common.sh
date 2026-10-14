@@ -42,3 +42,17 @@ install_path() {
 
 # release_version TAG -> 1.1.0 (strips the leading v)
 release_version() { echo "${1#v}"; }
+
+# next_version GIT_DIR REF -> the next patch version after the latest stable tag reachable from REF (v1.0.0 if none)
+next_version() {
+  local latest; latest=$(git -C "$1" describe --tags --abbrev=0 --match 'v[0-9]*' --exclude '*-*' "$2" 2>/dev/null || true)
+  if [[ $latest =~ ^v([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then echo "v${BASH_REMATCH[1]}.${BASH_REMATCH[2]}.$((BASH_REMATCH[3] + 1))"
+  else echo v1.0.0; fi
+}
+
+# is_main_dev USER ORG -> true when USER is in ORG's Owners team (the main devs: they review module changes and tag)
+is_main_dev() {
+  local tid; tid=$(api GET "/orgs/$2/teams?limit=50" | jq -r '.[]|select(.name=="Owners")|.id' | head -1) || return 1
+  [ -n "$tid" ] || return 1
+  [ "$(curl -s -o /dev/null -w '%{http_code}' -H "Authorization: token ${BOT_TOKEN}" "${GITEA_URL}/api/v1/teams/${tid}/members/$1")" = 200 ]
+}

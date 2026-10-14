@@ -7,7 +7,7 @@
 #   ./lab e2e lines      only the release-line scenarios (2.0.0, 1.x/2.x branches, extension package, customers)
 #
 # What it proves: sites render -> in-place edit in shop-a -> Upstream MR in the module repo -> module Checks -> merge
-# -> tag as main dev -> Release job -> update PRs in both projects (by bot) -> project Checks -> merge -> both
+# -> /merge and /release by the main dev in the project PR -> Release job -> update PRs in both projects (by bot) -> project Checks -> merge -> both
 # projects locked to the new version and carrying the edit -> database rebuilt from committed config.
 set -uo pipefail
 . "$(dirname "$0")/lib.sh"
@@ -91,17 +91,21 @@ n_mr=$(api GET "/repos/$MODULE_ORG/ait_banners/pulls?state=all&limit=50" | jq --
 links() { api GET "/repos/sites/shop-a/issues/$ppr/comments" | jq --arg u "/$MODULE_ORG/ait_banners/pulls/$mr" '[.[]|select(.body|contains($u))]|length'; }
 wait_for 300 "link comment on sites/shop-a#$ppr" bash -c ". '$LAB_ROOT/ops/bin/lib.sh'; [ \"\$(api GET '/repos/sites/shop-a/issues/$ppr/comments' | jq '[.[]|select(.body|contains(\"/pulls/$mr\"))]|length')\" -ge 1 ]" \
   && [ "$(links)" = 1 ] && ok "project PR #$ppr links MR #$mr exactly once" || bad "project PR #$ppr has $(links) link comments (expected 1)"
-merge_pr "$MODULE_ORG/ait_banners" "$mr" && ok "MR #$mr merged by the main dev" || die "merge refused"
+# the main dev drives the rest from the project PR (commands.yml, ci-tools v1.7.0)
+say() { api POST "/repos/sites/shop-a/issues/$ppr/comments" "$(jq -n --arg b "$1" '{body:$b}')" >/dev/null; }
+say "/merge $MODULE_ORG/ait_banners#$mr"
+wait_for 300 "MR #$mr merged by /merge" bash -c ". '$LAB_ROOT/ops/bin/lib.sh'; [ \"\$(api GET '/repos/$MODULE_ORG/ait_banners/pulls/$mr' | jq -r .merged)\" = true ]" \
+  && ok "'/merge $MODULE_ORG/ait_banners#$mr' in the project PR: the bot merged the MR" || die "/merge did not merge MR #$mr"
 wait_for 300 "release reminder on MR #$mr" bash -c ". '$LAB_ROOT/ops/bin/lib.sh'; api GET '/repos/$MODULE_ORG/ait_banners/issues/$mr/comments' | grep -q 'release-reminder'" \
   && ok "release reminder posted on MR #$mr" || bad "no release reminder on MR #$mr"
 api GET "/repos/sites/shop-a/issues/$ppr/comments" | grep -q "upstream-merged:$MODULE_ORG/ait_banners#$mr" \
   && ok "project PR #$ppr was told its change is merged" || bad "project PR #$ppr got no 'merged' notice"
 
-tmp=$(mktemp -d)
-git clone -q --depth 1 "http://$ADMIN:$ADMIN_PW@$GITEA_HOST:3000/$MODULE_ORG/ait_banners.git" "$tmp/m" \
-  && git -C "$tmp/m" -c user.name="Main Dev" -c user.email=admin@example.test tag -a "v$next" -m "e2e release $next" \
-  && git -C "$tmp/m" push -q origin "v$next" 2>/dev/null && ok "tagged v$next as the main dev" || die "could not tag"
-rm -rf "$tmp"
+api GET "/repos/sites/shop-a/issues/$ppr/comments" | grep -q "/release $MODULE_ORG/ait_banners v$next" \
+  && ok "the project PR asks the main devs for '/release $MODULE_ORG/ait_banners v$next'" || bad "no /release line for v$next in the project PR"
+say "/release $MODULE_ORG/ait_banners v$next"
+wait_for 300 "tag v$next by /release" bash -c ". '$LAB_ROOT/ops/bin/lib.sh'; [ \"\$(http_code GET '/repos/$MODULE_ORG/ait_banners/tags/v$next')\" = 200 ]" \
+  && ok "'/release $MODULE_ORG/ait_banners v$next' in the project PR: the bot tagged v$next" || die "/release did not tag v$next"
 git -C "$A" branch -D "$branch" >/dev/null 2>&1
 
 upd="update/ait_banners-$next"

@@ -145,22 +145,25 @@ for entry in "${mods[@]}"; do
       log "project pull request #${pr} already has the Upstream comment"
     else
       if [ -n "$mr_url" ]; then
-        head_line="**Do not merge this pull request yet.** It changes the shared module \`${name}\`, so the Upstream job sent the change to the module repository as ${mr_url} (target \`${target}\`). Until that change is released, the Checks of this pull request fail on purpose: unreleased module code never reaches \`main\`."
-        steps="1. A main dev reviews and merges ${mr_url}. Every further push to this branch updates it.
-2. A main dev tags the next release on \`${target}\`."; nxt=3
+        status="Sent to the module repository as ${mr_url} (target \`${target}\`); every further push to this branch updates it."
+        ask="**Main devs:** review the change in ${mr_url}, then reply here with
+\`/merge ${name}#${mr}\`"
       else
-        head_line="**Do not merge this pull request yet.** Its change to the shared module \`${name}\` is already merged into the module's \`${target}\` branch, but not released yet. Until it is released, the Checks of this pull request fail on purpose: unreleased module code never reaches \`main\`."
-        steps="1. A main dev tags the next release on \`${target}\`."; nxt=2
+        nv=$(next_version "$mod" "origin/${target}")
+        status="Already merged into \`${target}\` of \`${name}\`, not released yet."
+        ask="**Main devs:** reply here with
+\`/release ${name} ${nv}\`
+(or tag \`${nv}\` on \`${target}\` yourself)"
       fi
       note=$(cat <<NOTE
 ${marker}
-${head_line}
+**This pull request changes the shared module \`${name}\`** (\`${path}\`). It becomes mergeable when that change is released: until then its Checks stay red and Gitea blocks the merge. You have nothing to do unless the review asks for changes.
 
-What happens next (nothing to do for you unless the review asks for changes):
-${steps}
-${nxt}. The Release job then adds the release to **this** pull request (one commit by the bot: \`composer update ${name}\`). Its Checks turn green and you merge it as usual. Run \`git pull\` before you push to this branch again.
+${status}
 
-If several open pull requests in this project change \`${name}\`, or this branch moved when the release came, the Release job opens a separate update pull request instead and says here what to do.
+${ask}
+
+After the release the bot adds it to this pull request (one commit: \`composer update ${name}\`; run \`git pull\` before you push again), the Checks turn green and you merge as usual.
 NOTE
 )
       api POST "/repos/${REPOSITORY}/issues/${pr}/comments" "$(jq -n --arg b "$note" '{body:$b}')" >/dev/null

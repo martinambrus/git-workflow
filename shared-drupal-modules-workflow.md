@@ -196,7 +196,7 @@ Merge through the usual project merge request. While a module is on 0.x, `^0.1` 
 
 ## 8. Review and release (Main dev)
 
-**8.1 Review and merge.** Review the module merge request the bot opened, check that module CI is green and merge it into `main` (or into `1.x` if that is its target). Requests for changes go back to the developer, who changes the project and pushes again. When a merge request from the Upstream job is merged, a reminder comment on it names the next version and how to tag it, and the project's pull request is told that its change waits for that release.
+**8.1 Review and merge.** Review the module merge request the bot opened, check that module CI is green and merge it into `main` (or into `1.x` if that is its target). Requests for changes go back to the developer, who changes the project and pushes again. The main dev can do both steps from the developer's pull request in the project: the bot's comment there ends with the reply to give, `/merge activit/<module>#<n>` (the bot merges the module merge request once its checks pass) and then `/release activit/<module> v<x.y.z>` (the bot tags it on the right line). Only main devs (the module organization's Owners team) can use these replies. When a merge request from the Upstream job is merged, a reminder comment on it names the next version and how to tag it, and the project's pull request is asked for the `/release` reply.
 
 **8.2 Pick the version.** Patch (`1.0.1`) for bug fixes, minor (`1.1.0`) for backwards-compatible features, major (`2.0.0`) for breaking changes or for dropping a Drupal core version, which also starts a new release line (section 11).
 
