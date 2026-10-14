@@ -557,8 +557,9 @@ and implements the new hook; only **shop-b** gets it.
   📸 composer.json. ✅ Nothing to do: this is the state since Phase 6, and 9.3 showed it holds.
 - [ ] **11.2 Support expired.** Gitea → `sites/shop-a` → remove the topic `activit-project`. 📸 Release a tiny 1.x
   patch (`v1.1.3`, as in 10.1/10.2). ✅ Packeton lists `v1.1.3`, **no** update PR appears in shop-a.
-  🧪 In shop-a: `ddev composer outdated "activit/*"` lists the newer version: the project can still choose to take
-  it by hand (that is the "we do not supply it automatically" case).
+  🧪 In shop-a: `ddev composer outdated --minor-only "activit/*"` lists `1.1.2 ! 1.1.3`: the project can still choose
+  to take it by hand (that is the "we do not supply it automatically" case). Without `--minor-only` Composer shows
+  the newest version of any major (`~ 2.0.1`, which `^1.0` does not allow).
 - [ ] **11.3 Freeze at an exact version.**
   Pin it at the version it has **now** (read it from `composer.lock`: `v1.1.2` in this walkthrough; pinning an
   older number would be a downgrade):
