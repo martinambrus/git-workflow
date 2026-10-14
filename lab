@@ -20,8 +20,14 @@ case $cmd in
             if [ "${1:-}" = -y ]; then a=y; else
               read -r -p "Delete ALL lab data (Gitea, Packeton, runner, DDEV sites, ops/.state, and the clones in modules/ projects/ tools/)? [y/N] " a; fi
             if [ "$a" = y ]; then
+              # DDEV project names are global: only delete a project that really lives in this lab folder (the manual
+              # walkthrough's workspace/shop-a is also called "shop-a" and must survive)
               for d in "$ROOT"/projects/*/; do
-                if [ -d "${d}.ddev" ]; then ( cd "$d" && ddev delete -O -y >/dev/null 2>&1 ) || true; fi
+                [ -d "${d}.ddev" ] || continue
+                n=$(awk '/^name:/{print $2; exit}' "${d}.ddev/config.yaml")
+                r=$(ddev list -j 2>/dev/null | jq -r --arg n "$n" '.raw[]?|select(.name==$n)|.approot' | head -1)
+                if [ -n "$r" ] && [ "$r" != "${d%/}" ]; then echo "keeping DDEV project $n: it lives in $r, not in this lab"; continue; fi
+                ( cd "$d" && ddev delete -O -y >/dev/null 2>&1 ) || true
               done
               dc --profile build --profile external down -v --remove-orphans
               docker rmi activit-runner:local >/dev/null 2>&1 || true

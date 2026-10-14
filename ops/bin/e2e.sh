@@ -19,6 +19,14 @@ QUICK=0; [ "${1:-}" = --quick ] && QUICK=1
 # --------------------------------------------------------------------------------------------------------------------
 step "0. prerequisites"
 for t in docker git curl jq ddev; do command -v $t >/dev/null && ok "$t found" || die "$t is required"; done
+# DDEV names are global: the manual walkthrough's sites are also called shop-a / shop-b. Using them here would start,
+# rebuild (sql:drop in step 5) and finally delete THOSE databases. Refuse instead.
+for p in shop-a shop-b; do
+  r=$(ddev list -j 2>/dev/null | jq -r --arg n "$p" '.raw[]?|select(.name==$n)|.approot' | head -1)
+  [ -z "$r" ] || [ "$r" = "$LAB_ROOT/projects/$p" ] \
+    || die "a DDEV project '$p' already exists in $r (the manual walkthrough?). Remove it (ddev delete there) or run only './lab e2e lines' (no DDEV)"
+done
+ok "no foreign DDEV projects named shop-a / shop-b"
 hosts_ok && ok "gitea.test / packeton.test resolve" || die "run ./lab hosts first"
 curl -fsS "$GITEA/api/v1/version" >/dev/null 2>&1 && ok "Gitea is up" || die "stack is not running: ./lab up"
 load_secrets

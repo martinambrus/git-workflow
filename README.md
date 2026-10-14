@@ -225,6 +225,16 @@ Update PRs, Checks, protected branches, Packeton grants). 78 assertions:
     when the package did not change since the latest tag. Checked against the instance history (#25/#31 package,
     #27/#33 CI-only) and on a throwaway Gitea 28.1 + Packeton + act_runner.
 
+42. **The automated lab and the manual walkthrough share DDEV project names** (`shop-a`, `shop-b`), and DDEV names are
+    global. With the walkthrough's sites registered, `./lab destroy` would have run `ddev delete` on them, and a full
+    `./lab e2e` would have started, rebuilt (`sql:drop` in step 5) and deleted **the walkthrough's databases**. Found
+    before it happened. Now `./lab destroy` only deletes a DDEV project whose `approot` is the lab's own folder, and
+    `./lab e2e` refuses to start while a `shop-a`/`shop-b` DDEV project lives elsewhere (`./lab e2e lines` uses no
+    DDEV and is safe). Run on 2026-10-14 with the walkthrough paused (`./lab bare down`, its DDEV web containers
+    detached from `wf-net` and reattached afterwards): `./lab up` from scratch, `./lab e2e lines` **85 passed, 0
+    failed** (incl. the release reminder, the in-place release into the developer's PR, the forward-port prompt and the
+    overview over two hops), `./lab destroy`, then the walkthrough came back intact.
+
 ## Fresh-machine replay (verified)
 
 Done from a plain `git clone` of this repository on a machine that had been wiped of every lab container, volume,
