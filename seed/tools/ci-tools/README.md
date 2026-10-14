@@ -96,3 +96,6 @@ scenarios: a project on 1.x could not send a fix once `main` had moved to 2.0.0)
 
 **v1.8.2:** a merged forward-port counts as released when any release on its line contains it (`released_in`);
 `/release` on a merged forward-port refuses an empty release (already released, or nothing new on the line).
+
+**v1.8.3:** the forward-port prompt says "merge with the button" while the default branch has no `commands.yml`
+(replies would do nothing there).

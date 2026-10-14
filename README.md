@@ -212,6 +212,9 @@ Update PRs, Checks, protected branches, Packeton grants). 78 assertions:
     only). Now a merge counts as released when any release on its line **contains** it (`released_in`, `git tag
     --contains`), and `/release` on a merged forward-port refuses when it is already released or the line has
     nothing new since its latest tag.
+    **v1.8.3**: the forward-port prompt asked for `/merge` in a repository whose default branch had no
+    `commands.yml` yet (the ribbon upgrade, where that very PR brings it), and the reply silently did nothing. The
+    Forward-port job now checks the default branch and then says "merge it with the button" instead.
 
 ## Fresh-machine replay (verified)
 

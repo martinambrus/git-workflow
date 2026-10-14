@@ -71,6 +71,14 @@ for c in "${commits[@]}"; do
   num=$(api POST "/repos/$REPOSITORY/pulls" "$(jq -n --arg t "Forward-port ($BRANCH -> $target): $subject" --arg b "$body" --arg h "$fb" --arg base "$target" '{title:$t,body:$b,head:$h,base:$base}')" | jq -r .number)
   log "$short: opened ${REPOSITORY}#${num} into $target: ${GITEA_URL}/${REPOSITORY}/pulls/${num}"
   nv=$(next_version . "origin/$target")
+  if ! git cat-file -e "origin/${default}:.gitea/workflows/commands.yml" 2>/dev/null; then
+    # Gitea runs comment workflows from the default branch: without commands.yml there, replies do nothing at all
+    prompt="<!-- fwd-prompt -->
+**Merge this pull request with the merge button** once the Checks are green: \`${default}\` has no \`commands.yml\` yet (this pull request may be the one that brings it), so replies like \`/merge\` or \`/release\` do nothing in this repository yet. Release afterwards by tagging \`${nv}\` on \`${target}\`."
+    api POST "/repos/$REPOSITORY/issues/${num}/comments" "$(jq -n --arg b "$prompt" '{body:$b}')" >/dev/null || warn "#$num: prompt comment failed"
+    overview "$(origin_of "$REPOSITORY" "$c")" "${REPOSITORY}#${num}" "$(fwd_line "$REPOSITORY" "$num" "$BRANCH" "$target" "open (merge it with the button)")"
+    continue
+  fi
   prompt="<!-- fwd-prompt -->
 **Main devs:** once the Checks are green, reply here with
 \`/release ${nv}\`
