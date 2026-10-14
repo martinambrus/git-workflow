@@ -129,6 +129,14 @@ Update PRs, Checks, protected branches, Packeton grants). 78 assertions:
     `~/.ddev/homeadditions/.composer/auth.json` (DDEV copies it into every project's container on each start); it also
     removes the per-project step of finding 9 and keeps the token out of every repository.
 
+37. **The Upstream link comment never appeared on a new project PR.** `upstream.yml` ran on push only, and on a
+    branch's first push its pull request cannot exist yet, so the "sent upstream" comment came only with a second push
+    (found in the manual walkthrough, 12.2). Fix: `upstream.yml` also runs on `pull_request` (`opened`, `reopened`),
+    reading the branch from `github.head_ref`, with `concurrency: upstream-<branch>` so the push run and the PR run
+    never race to open the merge request twice. Verified on a throwaway Gitea 28.1 + act_runner 0.6.1 (PR opened
+    seconds after the push: the runs were serialised, one MR, one comment); `./lab e2e` now asserts both. Projects
+    created before this fix keep the old file: copy `seed/project-template/.gitea/workflows/upstream.yml` in via a PR.
+
 ## Fresh-machine replay (verified)
 
 Done from a plain `git clone` of this repository on a machine that had been wiped of every lab container, volume,
@@ -265,7 +273,8 @@ first run). After that, the module lives in Gitea and `modules/ait_banners` is i
 What it does on every push to a project branch: reads the locked `activit/*` modules from `composer.lock`, compares
 each module folder with `git archive` of its locked tag, and if they differ pushes **one cumulative commit** to
 `up/<project>/<branch>` in the module repo, opens or updates the merge request (target `<major>.x` if that branch
-exists, else `main`), and comments the link once on the project's pull request. The integrity check (module branch ==
+exists, else `main`), and comments the link once on the project's pull request. It also runs when a project pull request is opened (the
+first push of a branch comes before its PR), and a concurrency group per branch queues the push run and the PR run. The integrity check (module branch ==
 project folder) runs **before** the push. Re-running is safe.
 
 Verified here: `shop-a` branch `feature/promo-banner` (in-place edit of `ait_banners` locked to `v1.0.1`) produced

@@ -75,6 +75,10 @@ echo "/* $marker: edited in place in shop-a */" >> "$A/web/modules/custom/ait_ba
 git -C "$A" switch -q -c "$branch" && git -C "$A" commit -qam "Banner css: e2e marker $marker" && git -C "$A" push -q -u origin "$branch" 2>/dev/null \
   && ok "in-place edit pushed to shop-a ($branch)" || die "could not push the edit"
 git -C "$A" switch -q main
+# the project PR, opened right after the push (as a developer would): the PR run and the push run of upstream.yml
+# share a concurrency group, so there must be exactly one MR and exactly one link comment on this PR
+ppr=$(api POST "/repos/sites/shop-a/pulls" "$(jq -n --arg h "$branch" '{title:"Banner css (e2e)",head:$h,base:"main"}')" | jq -r .number)
+[ -n "$ppr" ] && [ "$ppr" != null ] && ok "project PR sites/shop-a#$ppr opened" || die "could not open the project PR"
 
 wait_for 300 "Upstream MR" bash -c ". '$LAB_ROOT/ops/bin/lib.sh'; [ -n \"\$(api GET '/repos/$MODULE_ORG/ait_banners/pulls?state=open&limit=50' | jq -r '.[]|select(.head.ref==\"$bot_branch\")|.number')\" ]" \
   && ok "Upstream job opened a merge request in activit/ait_banners" || die "no Upstream MR"
@@ -82,6 +86,11 @@ mr=$(open_pr_number "$MODULE_ORG/ait_banners" "$bot_branch")
 files=$(api GET "/repos/$MODULE_ORG/ait_banners/pulls/$mr/files" | jq -r '[.[].filename]|join(",")')
 [ "$files" = "css/banner.css" ] && ok "MR #$mr contains exactly the edit (css/banner.css)" || bad "MR #$mr files: $files"
 wait_for 900 "module Checks" is_success "$MODULE_ORG/ait_banners" "$bot_branch" && ok "module Checks green on MR #$mr" || bad "module Checks not green ($(pr_status "$MODULE_ORG/ait_banners" "$bot_branch"))"
+n_mr=$(api GET "/repos/$MODULE_ORG/ait_banners/pulls?state=all&limit=50" | jq --arg h "$bot_branch" '[.[]|select(.head.ref==$h)]|length')
+[ "$n_mr" = 1 ] && ok "exactly one MR for $bot_branch" || bad "$n_mr MRs for $bot_branch (push run and PR run raced?)"
+links() { api GET "/repos/sites/shop-a/issues/$ppr/comments" | jq --arg u "/$MODULE_ORG/ait_banners/pulls/$mr" '[.[]|select(.body|contains($u))]|length'; }
+wait_for 300 "link comment on sites/shop-a#$ppr" bash -c ". '$LAB_ROOT/ops/bin/lib.sh'; [ \"\$(api GET '/repos/sites/shop-a/issues/$ppr/comments' | jq '[.[]|select(.body|contains(\"/pulls/$mr\"))]|length')\" -ge 1 ]" \
+  && [ "$(links)" = 1 ] && ok "project PR #$ppr links MR #$mr exactly once" || bad "project PR #$ppr has $(links) link comments (expected 1)"
 merge_pr "$MODULE_ORG/ait_banners" "$mr" && ok "MR #$mr merged by the main dev" || die "merge refused"
 
 tmp=$(mktemp -d)
@@ -89,6 +98,7 @@ git clone -q --depth 1 "http://$ADMIN:$ADMIN_PW@$GITEA_HOST:3000/$MODULE_ORG/ait
   && git -C "$tmp/m" -c user.name="Main Dev" -c user.email=admin@example.test tag -a "v$next" -m "e2e release $next" \
   && git -C "$tmp/m" push -q origin "v$next" 2>/dev/null && ok "tagged v$next as the main dev" || die "could not tag"
 rm -rf "$tmp"
+api PATCH "/repos/sites/shop-a/pulls/$ppr" '{"state":"closed"}' >/dev/null   # its change comes back as the release
 git -C "$A" push -q origin --delete "$branch" 2>/dev/null; git -C "$A" branch -D "$branch" >/dev/null 2>&1
 
 upd="update/ait_banners-$next"

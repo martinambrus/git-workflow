@@ -597,9 +597,9 @@ into a merge request in the module repo.
   `web/modules/custom/ait_banners/css/banner.css`, commit, push.
 - [ ] **12.2** ✅ The *Upstream* run (project → *Actions*) opens a merge request in `activit/ait_banners` from branch
   `up/shop-a/<your-branch>` (slashes become dashes: `up/shop-a/fix-banner-css`); because shop-a is locked to a **1.x** release **and the branch `1.x` exists**, its
-  target is `1.x` (not `main`). The project PR gets one comment with the link
-  *on the next push* (Upstream runs on push only, and on the first push the PR cannot exist yet: re-run the
-  Upstream run after opening the PR, or push again). 📸 Merge it, tag the next `v1.1.x` on 1.x
+  target is `1.x` (not `main`). Open the project PR: Upstream runs again
+  for it (it runs on push **and** when a PR is opened) and the PR gets **one** comment with the link. ⚠ A project
+  set up with an older `upstream.yml` (push only, README finding 37) gets the comment only with the next push. 📸 Merge it, tag the next `v1.1.x` on 1.x
   (10.2): shop-a gets a normal update PR that brings the change back as a release; merge it and **close** the
   project PR unmerged (its change is now in the release). The loop closes. ⚠ A project *cannot* merge to `main` while its module folder differs from the release
   (Checks fail on PRs into `main`; plan 6.6). ⚠ Never commit to an `up/...` branch by hand.
