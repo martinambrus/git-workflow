@@ -45,8 +45,13 @@ case $cmd in
                        bdc up -d gitea packeton
                        until [ "$(curl -s -o /dev/null -w '%{http_code}' http://localhost:3000/)" = 200 ]; do sleep 2; done
                        until [ "$(curl -s -o /dev/null -w '%{http_code}' http://localhost/login)" = 200 ]; do sleep 2; done
-                       echo; echo "Gitea    http://gitea.test:3000   (first visit: install wizard)"
-                       echo "Packeton http://packeton.test      (no user yet: create the admin on the command line)"
+                       echo
+                       if curl -s http://localhost:3000/ | grep -q '<title>Installation'; then
+                         echo "Gitea    http://gitea.test:3000   (not installed yet: the install wizard is waiting)"
+                       else echo "Gitea    http://gitea.test:3000   (installed)"; fi
+                       if [ "$(bdc exec -T packeton app dbal:run-sql 'select count(*) as n from fos_user' 2>/dev/null | grep -oE '^\s+[0-9]+' | tr -d ' ')" = 0 ]; then
+                         echo "Packeton http://packeton.test      (no user yet: create the admin on the command line)"
+                       else echo "Packeton http://packeton.test      (users exist)"; fi
                        hosts_ok || echo "NOTE: run ./lab hosts once" ;;
               runner)  [ -n "${1:-}" ] || { echo "usage: ./lab bare runner <registration-token>   (Gitea: Site administration > Actions > Runners)" >&2; exit 1; }
                        printf 'RUNNER_TOKEN=%s\n' "$1" > "$BD/.env"; bdc --profile runner up -d runner ;;
