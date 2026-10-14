@@ -622,6 +622,11 @@ into a merge request in the module repo.
   - the project PR's Checks are **red** on purpose: "drift in our own modules … This is expected for an in-place
     module change: do not merge" (plan 6.6). 📸 the comment and the red check.
 - [ ] **12.3 The main dev merges the module MR** (`activit/ait_banners` → the `up/shop-a/...` PR → Checks → merge).
+  Gitea may say "This branch is out-of-date with the base branch" and offer *Update branch by merge*: ignore it and
+  merge. The bot branch is cut from the release the project is locked to, never from the moving `1.x`; a commit added
+  by that button would be on a bot branch (never commit there) and is discarded by the next push from the project.
+  ⚠ If another in-place change to the **same lines** was merged into `1.x` since that release, the MR conflicts: the
+  main dev resolves it like any conflict, or tags the earlier change first so the project updates and re-sends.
   ✅ The *release-reminder* run comments on the merged MR: "Merged into `1.x`, **not released yet** (latest release
   on this line: `v1.1.x`) … tag **`v1.1.y`** on `1.x`", with the command line and the web-UI steps; and the project
   PR gets "Your module change was merged … waits for a main dev to tag the release". 📸 both comments.
