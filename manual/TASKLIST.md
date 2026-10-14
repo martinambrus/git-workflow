@@ -243,6 +243,14 @@ key, and name `activit/<repo>`.
   ```
   ✅ Packeton lists `v1.0.0` within seconds; in the module repo's *Actions* the **Release** run goes green (no
   projects exist yet, so it opens no PRs). 📸 ⚠ Findings 6 and 27 (order and timing).
+  *Or in the web UI* (works the same: the Release job and Packeton's webhook fire; tested on 28.1). The **Tags** page
+  has **no** create button. Instead:
+  - **Code** tab → branch dropdown → select the **release line** (`main` here, `1.x` for a 1.x patch) → open the
+    dropdown again → **Tags** tab → type `v1.0.0` → **Create tag v1.0.0**. The tag is cut from the branch you are on.
+  - or **Releases → New Release** → type the new tag name → set **Target** → **Publish Release** (also creates a Gitea
+    release entry, which we do not need; *Save Draft* creates no tag).
+  ⚠ The target defaults to `main`: a 1.x patch tagged without switching to `1.x` releases the 2.x code as `1.1.x`.
+  Only `admin` can create `v*` tags here too (5.2).
 - [ ] **5.5 Branch rules** (repo → *Settings → Branches → Add new rule*):
   1. pattern `main`: **Disable Push**, **Enable Status Check** with the status check pattern `checks / checks (pull_request)`.
   2. pattern `[0-9]*.x` (matches `1.x`, `2.x`, not `feat.x`): same status check, but under *Push* choose
@@ -513,6 +521,7 @@ and implements the new hook; only **shop-b** gets it.
   ```bash
   git switch 1.x && git branch --set-upstream-to=origin/1.x 1.x && git pull && git tag -a v1.1.1 -m "1.1.1" && git push origin v1.1.1
   ```
+  (Web UI instead: as in 5.4b, with the branch dropdown on **`1.x`**.)
   ✅ **Release job → update PR only in shop-a** (`update/ait_banners-1.1.1`): shop-b is on `^2.0`, so it is skipped.
   📸 the one PR and the empty list in shop-b. Merge it. shop-a is now on `v1.1.1`.
 - [ ] **10.3 The forward-port.** Pushing to `1.x` triggered the **Forward-port** job: ✅ a PR
