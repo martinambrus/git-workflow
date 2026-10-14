@@ -206,6 +206,12 @@ Update PRs, Checks, protected branches, Packeton grants). 78 assertions:
     **v1.8.1** (found on the walkthrough instance): the overview never appeared when the project PR was already
     merged, because Gitea then reports its `head.ref` as `refs/pull/<n>/head`; `origin_of` now also matches
     `head.label`, which keeps the branch name (the throwaway test had used an open project PR).
+    **v1.8.2** (also found on the instance): a forward-port merged with the button *before* another forward-port's
+    `/release` was reported "not released" (the reminder only looked for a tag **on** its merge commit), and
+    `/release v2.0.3` on it then tagged the same commit as v2.0.2 again: an empty release (shop-b #7, Composer files
+    only). Now a merge counts as released when any release on its line **contains** it (`released_in`, `git tag
+    --contains`), and `/release` on a merged forward-port refuses when it is already released or the line has
+    nothing new since its latest tag.
 
 ## Fresh-machine replay (verified)
 

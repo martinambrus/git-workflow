@@ -57,6 +57,13 @@ if [ "${REPOSITORY%%/*}" = "$MODULE_ORG" ]; then
     fi
   fi
 
+  if [ "$cmd" = /release ] && [ "$merged" = true ]; then   # releasing a merged PR: is there anything to release?
+    msha=$(jq -r '.merge_commit_sha // empty' <<<"$pr")
+    rel=$([ -n "$msha" ] && released_in "$work/m" "$msha" "$base")
+    [ -z "$rel" ] || { reply "@${user}: this change is already released in \`${rel}\`: nothing done."; exit 0; }
+    [ -z "${latest:-}" ] || [ "$(git -C "$work/m" rev-list -n1 "$latest")" != "$(git -C "$work/m" rev-parse "origin/${base}")" ] \
+      || { reply "@${user}: \`${base}\` has nothing new since \`${latest}\`: nothing done."; exit 0; }
+  fi
   if [ "$merged" != true ]; then
     st=$(api GET "/repos/${REPOSITORY}/commits/$(jq -r .head.sha <<<"$pr")/status" | jq -r '.state // "pending"')
     [ "$st" = success ] || { reply "@${user}: the Checks of this pull request are \`${st}\`, not green yet: try again when they pass."; exit 0; }

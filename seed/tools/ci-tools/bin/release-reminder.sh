@@ -23,7 +23,7 @@ case $HEAD_REF in
          origin=$(origin_of "$REPOSITORY" "$sha")
          tag=""; for _ in 1 2 3 4 5 6; do           # /release tags right after its merge: give it a moment
            git -C "$work/m" fetch -q --tags origin
-           tag=$(git -C "$work/m" tag --points-at "$sha" | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -1 || true)
+           tag=$(released_in "$work/m" "$sha" "$BASE_REF")    # any release on the line that contains the merge
            [ -n "$tag" ] && break; sleep 5; done
          if [ -n "$tag" ]; then
            overview "$origin" "${REPOSITORY}#${PR}" "$(fwd_line "$REPOSITORY" "$PR" "$from" "$BASE_REF" "merged, **released as \`${tag}\`**")"

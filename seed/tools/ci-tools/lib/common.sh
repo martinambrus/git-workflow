@@ -50,6 +50,13 @@ latest_tag() {
   git -C "$1" describe --tags --abbrev=0 --match "$pat" --exclude '*-*' "$2" 2>/dev/null || true
 }
 
+# released_in GIT_DIR SHA LINE -> the first stable release on LINE (vN.* for <N>.x, any on main) that contains SHA
+released_in() {
+  local pat='v*'
+  [[ $3 =~ ^([0-9]+)(\.[0-9]+)*\.x$ ]] && pat="v${BASH_REMATCH[1]}.*"
+  git -C "$1" tag --contains "$2" --list "$pat" 2>/dev/null | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | head -1 || true
+}
+
 # next_version GIT_DIR REF -> the next patch version after latest_tag (v1.0.0 if none)
 next_version() {
   local latest; latest=$(latest_tag "$1" "$2")

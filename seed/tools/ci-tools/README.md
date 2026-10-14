@@ -93,3 +93,6 @@ scenarios: a project on 1.x could not send a fix once `main` had moved to 2.0.0)
 
 **v1.8.1:** `origin_of` also finds a merged project PR whose branch was deleted (Gitea reports `head.ref` as
 `refs/pull/<n>/head` then; `head.label` keeps the branch name).
+
+**v1.8.2:** a merged forward-port counts as released when any release on its line contains it (`released_in`);
+`/release` on a merged forward-port refuses an empty release (already released, or nothing new on the line).
