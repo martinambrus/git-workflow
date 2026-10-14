@@ -66,7 +66,13 @@ if [ "${REPOSITORY%%/*}" = "$MODULE_ORG" ]; then
   fi
   if [ "$merged" != true ]; then
     st=$(api GET "/repos/${REPOSITORY}/commits/$(jq -r .head.sha <<<"$pr")/status" | jq -r '.state // "pending"')
-    [ "$st" = success ] || { reply "@${user}: the Checks of this pull request are \`${st}\`, not green yet: try again when they pass."; exit 0; }
+    if [ "$st" = pending ] && [ "$cmd" = /merge ]; then   # /merge only: Gitea merges it once the Checks pass
+      api POST "/repos/${REPOSITORY}/pulls/${PR}/merge" '{"Do":"merge","delete_branch_after_merge":true,"merge_when_checks_succeed":true}' >/dev/null \
+        && reply "The Checks are still running: Gitea merges this into \`${base}\` as soon as they pass (requested by @${user})." \
+        || reply "@${user}: the Checks are still running and Gitea refused to schedule the merge: try again when they pass."
+      exit 0
+    fi
+    [ "$st" = success ] || { reply "@${user}: the Checks of this pull request are \`${st}\`, not green yet: $([ "$st" = pending ] && echo "reply \`/release\` again when they pass" || echo "fix them first"); nothing done."; exit 0; }
     api POST "/repos/${REPOSITORY}/pulls/${PR}/merge" '{"Do":"merge","delete_branch_after_merge":true}' >/dev/null \
       || { reply "@${user}: Gitea refused the merge (conflict, or a branch rule): nothing done."; exit 0; }
     sha=""; for _ in 1 2 3 4 5; do sha=$(api GET "/repos/${REPOSITORY}/pulls/${PR}" | jq -r '.merge_commit_sha // empty'); [ -n "$sha" ] && break; sleep 2; done
@@ -115,7 +121,15 @@ if [ "$cmd" = /merge ]; then
   [ "$(jq -r .merged <<<"$m")" = false ] || { reply "@${user}: ${module}#${mr} is already merged."; exit 0; }
   [ "$(jq -r .state <<<"$m")" = open ] || { reply "@${user}: ${module}#${mr} is closed: nothing done."; exit 0; }
   st=$(api GET "/repos/${module}/commits/$(jq -r .head.sha <<<"$m")/status" | jq -r '.state // "pending"')
-  [ "$st" = success ] || { reply "@${user}: the Checks of ${module}#${mr} are \`${st}\`, not green yet: try again when they pass."; exit 0; }
+  case $st in
+    success) ;;
+    pending) # Checks still running: let Gitea merge it the moment they pass
+      if api POST "/repos/${module}/pulls/${mr}/merge" '{"Do":"merge","delete_branch_after_merge":true,"merge_when_checks_succeed":true}' >/dev/null; then
+        reply "The Checks of ${GITEA_URL}/${module}/pulls/${mr} are still running: Gitea merges it into \`$(jq -r .base.ref <<<"$m")\` as soon as they pass (requested by @${user}). The release question follows then."
+      else reply "@${user}: the Checks of ${module}#${mr} are still running and Gitea refused to schedule the merge: try again when they pass."; fi
+      exit 0 ;;
+    *) reply "@${user}: the Checks of ${module}#${mr} are \`${st}\`: fix them first (push to this branch again), nothing done."; exit 0 ;;
+  esac
   if api POST "/repos/${module}/pulls/${mr}/merge" '{"Do":"merge","delete_branch_after_merge":true}' >/dev/null; then
     reply "Merged ${GITEA_URL}/${module}/pulls/${mr} into \`$(jq -r .base.ref <<<"$m")\` (requested by @${user}). The release question follows in a moment."
   else

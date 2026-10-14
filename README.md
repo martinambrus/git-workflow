@@ -235,6 +235,13 @@ Update PRs, Checks, protected branches, Packeton grants). 78 assertions:
     failed** (incl. the release reminder, the in-place release into the developer's PR, the forward-port prompt and the
     overview over two hops), `./lab destroy`, then the walkthrough came back intact.
 
+43. **A second identical rebuild restarted the module MR's Checks** (full `./lab e2e`, 2026-10-14): the Upstream job runs
+    for the push *and* for the opened PR; both rebuilt the bot branch with the same content but a new commit and
+    force-pushed, so the module Checks started again and a `/merge` sent in that window was refused as "pending".
+    ci-tools **v1.8.6**: the Upstream job does not push when the remote bot branch already has the same parent and the
+    same tree; `/merge` while Checks are still running asks Gitea to "merge when checks succeed" (verified on Gitea
+    28.1: HTTP 201, merged by `bot` once the Checks passed, branch deleted); red Checks are still refused.
+
 ## Fresh-machine replay (verified)
 
 Done from a plain `git clone` of this repository on a machine that had been wiped of every lab container, volume,

@@ -105,3 +105,6 @@ anew, the old copy deleted).
 
 **v1.8.5:** CI-only changes (nothing in the package archive differs, `export-ignore` applied) get no release prompt
 or reminder, and `/release` refuses them (`package_changed`).
+
+**v1.8.6:** Upstream does not re-push an identical bot branch (same parent and tree), so the MR's Checks do not restart;
+`/merge` while Checks are running schedules Gitea's merge-when-checks-succeed.

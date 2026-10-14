@@ -119,8 +119,16 @@ for entry in "${mods[@]}"; do
     fi
     log "integrity OK: module branch == project folder (client patches reversed)"
 
-    git -C "$mod" push -q --force origin "$bot_branch"
-    log "pushed ${MODULE_ORG}/${short}:${bot_branch} (cut from $version, target $target)"
+    # Same parent and same content as the bot branch already pushed (e.g. the PR-opened run after the push run):
+    # do not push again, or the merge request's Checks restart for nothing and a pending /merge has to wait.
+    if git -C "$mod" rev-parse -q --verify "refs/remotes/origin/$bot_branch" >/dev/null \
+       && [ "$(git -C "$mod" rev-parse "refs/remotes/origin/$bot_branch^{tree}")" = "$(git -C "$mod" rev-parse 'HEAD^{tree}')" ] \
+       && [ "$(git -C "$mod" rev-parse "refs/remotes/origin/$bot_branch^")" = "$(git -C "$mod" rev-parse 'HEAD^')" ]; then
+      log "${MODULE_ORG}/${short}:${bot_branch} already holds exactly this change: not pushed again"
+    else
+      git -C "$mod" push -q --force origin "$bot_branch"
+      log "pushed ${MODULE_ORG}/${short}:${bot_branch} (cut from $version, target $target)"
+    fi
 
     # --- merge request in the module repo -------------------------------------------------------------------
     title="Changes from ${project}: ${BRANCH}"

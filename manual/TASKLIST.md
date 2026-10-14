@@ -192,16 +192,16 @@ containing `dev` and `bot`; you hold a `BOT_TOKEN`.
   cp -a $REPO/seed/tools/ci-tools/. ci-tools/ && cd ci-tools
   git add -A && git commit -m "ci-tools: upstream, release, update-prs, checks, forward-port"
   git branch -M main && git push -u origin main
-  for t in v1.0.0 v1.1.0 v1.2.0 v1.3.0 v1.3.1 v1.4.0 v1.5.0 v1.6.0 v1.7.0 v1.8.0 v1.8.1 v1.8.2 v1.8.3 v1.8.4 v1.8.5; do git tag -a $t -m "ci-tools $t"; done
+  for t in v1.0.0 v1.1.0 v1.2.0 v1.3.0 v1.3.1 v1.4.0 v1.5.0 v1.6.0 v1.7.0 v1.8.0 v1.8.1 v1.8.2 v1.8.3 v1.8.4 v1.8.5 v1.8.6; do git tag -a $t -m "ci-tools $t"; done
   git push origin --tags
   ```
   ✅ the repo shows `bin/upstream.sh`, `bin/release.sh`, `bin/update-prs.sh`, `bin/check-project.sh`,
-  `bin/check-module.sh`, `bin/forward-port.sh`, `bin/release-reminder.sh`, `bin/commands.sh`, and fifteen tags. 📸
-  *Why fifteen tags:* a tag is never moved; the workflow stubs pin `v1.2.0` (module checks) and `v1.8.5` (everything
+  `bin/check-module.sh`, `bin/forward-port.sh`, `bin/release-reminder.sh`, `bin/commands.sh`, and sixteen tags. 📸
+  *Why sixteen tags:* a tag is never moved; the workflow stubs pin `v1.2.0` (module checks) and `v1.8.6` (everything
   else: project checks, upstream, commands, release, release reminder, forward-port); the older tags are history. In
   your own setup you would publish real versions.
 
-**Done when:** `git ls-remote --tags http://gitea.test:3000/activit/ci-tools.git` lists the fifteen tags.
+**Done when:** `git ls-remote --tags http://gitea.test:3000/activit/ci-tools.git` lists the sixteen tags.
 
 ---
 
@@ -630,7 +630,8 @@ into a merge request in the module repo.
   - the Checks are **red** on purpose ("drift in our own modules … expected for an in-place module change"), and the
     merge button refuses the PR, for admins too (5.5/6.6). 📸 the comment and the red check.
 - [ ] **12.3 The main dev reviews and replies `/merge activit/ait_banners#N`** in the project PR. Review the change in
-  the module MR first (the link in the comment); its Checks must be green. ✅ The bot answers "Merged …/pulls/N into
+  the module MR first (the link in the comment). If its Checks are still running, the bot schedules the merge and
+  Gitea merges it as soon as they pass; red Checks are refused. ✅ The bot answers "Merged …/pulls/N into
   `1.x` (requested by @admin)", and the *release-reminder* job adds "Module change merged … **Main devs:** reply here
   with `/release activit/ait_banners v1.1.y`" (the next patch version on `1.x`). 📸
   Only members of the `activit` **Owners** team (the main devs) can run the commands; anybody else gets "only main
@@ -665,9 +666,9 @@ into a merge request in the module repo.
   If the PR conflicts with `main` after the update (`main` changed `composer.lock` meanwhile), the bot comments the
   exact commands to fix it (take main's version of the conflicted Composer files, `composer update <module>`).
   ⚠ Never commit to an `up/...` branch by hand: it is rebuilt on every push of the project branch.
-  ⚠ Projects and modules set up before ci-tools `v1.8.5` (README findings 37–41) need the new workflow files first:
+  ⚠ Projects and modules set up before ci-tools `v1.8.6` (README findings 37–41) need the new workflow files first:
   `upstream.yml` + `checks.yml` + `commands.yml` in the project; `release.yml`, `release-reminder.yml`,
-  `forward-port.yml` and `commands.yml` on the module's release lines (ci-tools `v1.8.5`); and `bot` on the module's
+  `forward-port.yml` and `commands.yml` on the module's release lines (ci-tools `v1.8.6`); and `bot` on the module's
   protected-tag list.
   Replies (`/merge`, `/release`) run the `commands.yml` of the repo's **default branch** (`main`): until it is there,
   a reply does nothing at all (no run, no answer). Merge the forward-port PR that carries the new workflows to `main`
@@ -718,7 +719,7 @@ The workflow stubs in `seed/` contain these literally. Use them, or edit the stu
 | Users | `admin` (main dev: tags, release lines), `dev`, `bot` (automation) |
 | Org secrets (both orgs) | `BOT_TOKEN`, `PACKETON_TOKEN` |
 | Runner label | `activit-runner` |
-| ci-tools tags | `v1.2.0` module checks, `v1.8.5` everything else (project checks, upstream, commands, release, release reminder, forward-port) |
+| ci-tools tags | `v1.2.0` module checks, `v1.8.6` everything else (project checks, upstream, commands, release, release reminder, forward-port) |
 | Status check required on `main` and `[0-9]*.x` | `checks / checks (pull_request)` |
 | Opt-in topic for update PRs | `activit-project` |
 | Default branch | `main` |
