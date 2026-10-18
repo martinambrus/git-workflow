@@ -125,6 +125,10 @@ rejected, so the Release job adds the release to that pull request instead of op
 but no committed `vendor/composer/installed.json` is a warning on feature branches and a failure on pull requests into
 `main` and on `main`: the drift check cannot compare the module folders without `vendor/`.
 
+**v1.9.7:** `bin/check-project.sh` takes the Packeton user from `PACKETON_USER` (default `admin`). Each project has its own
+Packeton user and token (plan 10): Packeton rejects a token sent under another user's name, so the drift check's
+`COMPOSER_AUTH` names the project's user.
+
 **v1.9.6:** the Release job checks that a pull request's module change is in the release in the release checkout (the
 module at the tag), not in the project clone. Module paths map onto the module's root. Before, a breaking change in place
 was never found in the release, so the pull request was left for a separate update pull request.

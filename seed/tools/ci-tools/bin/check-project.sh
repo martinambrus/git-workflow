@@ -8,12 +8,14 @@
 #      Upstream job); failure for third-party code, and failure for everything on pull requests into main and on main.
 #
 # Env: GITEA_URL BOT_TOKEN PACKETON_TOKEN REPOSITORY EVENT (push|pull_request) BRANCH (head branch) BASE_REF (PR target)
+#      [PACKETON_USER=admin] the Packeton user that owns PACKETON_TOKEN (each project has its own user, plan 10)
 set -uo pipefail
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 . "$here/lib/common.sh"
 : "${REPOSITORY:?}" "${BRANCH:?}" "${PACKETON_TOKEN:?}"
 EVENT=${EVENT:-push}; BASE_REF=${BASE_REF:-}
 PACKETON_URL=${PACKETON_URL:-http://packeton.test}
+PACKETON_USER=${PACKETON_USER:-admin}
 phost=$(echo "$PACKETON_URL" | sed -E 's#^https?://([^/:]+).*#\1#')
 
 # strict = what would land on main: PRs targeting main, and main itself
@@ -60,7 +62,7 @@ echo "::endgroup::"
 # --- 4. drift -------------------------------------------------------------------------------------------------------
 echo "::group::4 drift (reinstall from composer.lock)"
 if [ -f composer.lock ] && [ -f vendor/composer/installed.json ]; then
-  export COMPOSER_AUTH="{\"http-basic\":{\"${phost}\":{\"username\":\"admin\",\"password\":\"${PACKETON_TOKEN}\"}}}"
+  export COMPOSER_AUTH="{\"http-basic\":{\"${phost}\":{\"username\":\"${PACKETON_USER}\",\"password\":\"${PACKETON_TOKEN}\"}}}"
   export COMPOSER_CACHE_DIR; COMPOSER_CACHE_DIR=$(mktemp -d)
   export COMPOSER_NO_INTERACTION=1
 
