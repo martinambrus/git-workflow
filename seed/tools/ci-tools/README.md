@@ -112,3 +112,7 @@ or reminder, and `/release` refuses them (`package_changed`).
 **v1.8.7:** `commands.sh` routes by the pull request, not by the repository's org: a forward-port PR (its body carries
 `<!-- forward-port:… -->`) goes to the module path, every other PR to the project path. Project repositories live in the
 same org as the modules, so before this every project-PR command was answered with the forward-port message.
+
+**v1.8.8:** `upstream.sh` ignores the project's `.gitea/` folder when it compares a module with its release. That folder
+is CI (`export-ignore` in the module, not part of the package), so a pinned workflow copy in a project's module folder
+no longer opens a merge request in the module repository.

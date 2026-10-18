@@ -76,15 +76,16 @@ for entry in "${mods[@]}"; do
   git -C "$mod" rev-parse -q --verify "refs/tags/$version" >/dev/null || die "tag $version not found in $remote"
   mkdir "$base" && git -C "$mod" archive "$version" | tar -x -C "$base"     # what the package of the locked tag contains
 
-  if diff -rq "$base" "$cand" >/dev/null; then
+  # .gitea/ is the project's own CI (export-ignore in the module, never part of the package): not a module change
+  if diff -rq -x .gitea "$base" "$cand" >/dev/null; then
     log "no drift in $path against $version: nothing to send"; echo "::endgroup::"; continue
   fi
-  log "drift in $path against $version:"; diff -rq "$base" "$cand" | sed 's/^/    /' || true
+  log "drift in $path against $version:"; diff -rq -x .gitea "$base" "$cand" | sed 's/^/    /' || true
 
   # patch: locked release -> project folder (binary-safe)
   git -C "$base" init -q && git -C "$base" add -A && bot_git -C "$base" commit -qm base
   find "$base" -mindepth 1 -maxdepth 1 -not -name .git -exec rm -rf {} +
-  cp -a "$cand/." "$base/" && git -C "$base" add -A
+  cp -a "$cand/." "$base/" && rm -rf "$base/.gitea" && git -C "$base" add -A
   git -C "$base" diff --cached --binary > "$work/changes.patch"
 
   # target line: <major>.x if that branch exists, else main
@@ -113,8 +114,8 @@ for entry in "${mods[@]}"; do
 
     # integrity: the module branch must reproduce the project folder exactly (checked BEFORE pushing)
     chk="$work/chk"; mkdir "$chk"; git -C "$mod" archive HEAD | tar -x -C "$chk"
-    if ! diff -rq "$chk" "$cand" >/dev/null; then
-      warn "integrity check failed for $name: module branch differs from project folder"; diff -rq "$chk" "$cand" | sed 's/^/    /' || true
+    if ! diff -rq -x .gitea "$chk" "$cand" >/dev/null; then
+      warn "integrity check failed for $name: module branch differs from project folder"; diff -rq -x .gitea "$chk" "$cand" | sed 's/^/    /' || true
       rc=1; echo "::endgroup::"; continue
     fi
     log "integrity OK: module branch == project folder (client patches reversed)"
