@@ -8,7 +8,7 @@ on:
 
 jobs:
   commands:
-    if: startsWith(github.event.comment.body, '/merge') || startsWith(github.event.comment.body, '/release ')
+    if: startsWith(github.event.comment.body, '/merge') || startsWith(github.event.comment.body, '/release ') || startsWith(github.event.comment.body, '/release_major ')
     runs-on: activit-runner
     steps:
       - name: Command
