@@ -116,3 +116,7 @@ same org as the modules, so before this every project-PR command was answered wi
 **v1.8.8:** `upstream.sh` ignores the project's `.gitea/` folder when it compares a module with its release. That folder
 is CI (`export-ignore` in the module, not part of the package), so a pinned workflow copy in a project's module folder
 no longer opens a merge request in the module repository.
+
+**v1.8.9:** `update-prs.sh` checks whether a project pull request's module change is in the release without its
+`.gitea/` files (CI, excluded from the package): the module part of a pull request that also bumped the pins is no longer
+rejected, so the Release job adds the release to that pull request instead of opening a separate update pull request.

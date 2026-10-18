@@ -21,6 +21,10 @@ export COMPOSER_AUTH="{\"http-basic\":{\"${phost}\":{\"username\":\"admin\",\"pa
 export COMPOSER_CACHE_DIR; COMPOSER_CACHE_DIR=$(mktemp -d)
 export COMPOSER_NO_INTERACTION=1 COMPOSER_ALLOW_SUPERUSER=1 COMPOSER_MEMORY_LIMIT=-1
 
+# The module's .gitea/ folder is CI, excluded from the package archive (export-ignore): a pull request's changes there
+# never reverse-apply to the release, so they are left out of the "contained" check.
+without_gitea() { awk '/^diff --git /{skip = ($0 ~ /\/\.gitea\//)} !skip' "$1"; }
+
 # supersede REPO UPDATE_PR MODULE_PATH -> project pull requests whose in-place module change was sent upstream (the
 # Upstream job's marker comment) and is now contained in this release: close them when they change nothing but the
 # module folder, otherwise say what to do. "Contained" = the pull request's own diff of the module folder reverse-
@@ -35,7 +39,7 @@ supersede() { local repo=$1 upd=$2 path=$3 n head others comments msg pdiff
     jq -e --arg m "$seen" '.[]|select(.body|contains($m))' <<<"$comments" >/dev/null && continue
     pdiff=$(mktemp); api GET "/repos/${repo}/pulls/${n}.diff" > "$pdiff" || { warn "$repo#$n: cannot read its diff"; continue; }
     others=$(api GET "/repos/${repo}/pulls/${n}/files?limit=100" | jq -r --arg p "${path}/" '.[].filename|select(startswith($p)|not)')
-    if ! git apply -R --check --include="${path}/*" "$pdiff" 2>/dev/null; then
+    if ! without_gitea "$pdiff" | git apply -R --check --include="${path}/*" - 2>/dev/null; then
       msg="${seen}
 Release \`${tag}\` of \`${package}\` is out (update pull request #${upd}), but it does not contain all of this pull request's changes in \`${path}\` (pushed after the module merge request was merged, or not merged yet). This pull request stays open; the Upstream job keeps the module merge request up to date."
       api POST "/repos/${repo}/issues/${n}/comments" "$(jq -n --arg b "$msg" '{body:$b}')" >/dev/null || warn "$repo#$n: comment failed"
@@ -79,7 +83,7 @@ inplace() { local repo=$1 path=$2 n head comments pdiff b out a sha i m cands=()
     jq -e --arg m "$marker" '.[]|select(.body|contains($m))' <<<"$comments" >/dev/null || continue
     cands+=("$n $head")
     pdiff=$(mktemp)
-    if api GET "/repos/${repo}/pulls/${n}.diff" > "$pdiff" && git apply -R --check --include="${path}/*" "$pdiff" 2>/dev/null; then
+    if api GET "/repos/${repo}/pulls/${n}.diff" > "$pdiff" && without_gitea "$pdiff" | git apply -R --check --include="${path}/*" - 2>/dev/null; then
       contained+=("$n $head"); fi
     rm -f "$pdiff"
   done < <(api GET "/repos/${repo}/pulls?state=open&limit=50" | jq -r --arg b "$branch" '.[]|select(.head.ref!=$b)|"\(.number) \(.head.ref)"')
