@@ -125,6 +125,10 @@ rejected, so the Release job adds the release to that pull request instead of op
 but no committed `vendor/composer/installed.json` is a warning on feature branches and a failure on pull requests into
 `main` and on `main`: the drift check cannot compare the module folders without `vendor/`.
 
+**v1.9.6:** the Release job checks that a pull request's module change is in the release in the release checkout (the
+module at the tag), not in the project clone. Module paths map onto the module's root. Before, a breaking change in place
+was never found in the release, so the pull request was left for a separate update pull request.
+
 **v1.9.5:** a new major reaches the project pull request its change came from. The Release job (`bin/update-prs.sh`)
 ran `composer update` for the new tag, which keeps the project's `^1.0` constraint, so the pull request stayed on `1.x`.
 Now a new major raises the constraint to `^N.0` (`composer require activit/<module>:^N.0`) on that pull request only, and
