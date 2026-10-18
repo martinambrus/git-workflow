@@ -111,6 +111,9 @@ if [ -f composer.lock ] && [ -f vendor/composer/installed.json ]; then
     fail "committed vendor/composer/installed.json does not match composer.lock (run composer install and commit)"
     diff <(echo "$want") <(echo "$have") | head -10 | sed 's/^/    /'
   fi
+elif [ -f composer.lock ]; then
+  # without the committed vendor/ the drift check cannot run: say so, and fail where it matters (strict)
+  soft "composer.lock is committed but vendor/composer/installed.json is not: drift cannot be compared (commit vendor/)"
 else
   log "no composer.lock/vendor: nothing to compare"
 fi

@@ -121,6 +121,10 @@ no longer opens a merge request in the module repository.
 `.gitea/` files (CI, excluded from the package): the module part of a pull request that also bumped the pins is no longer
 rejected, so the Release job adds the release to that pull request instead of opening a separate update pull request.
 
+**v1.9.2:** `bin/check-project.sh` no longer skips the drift check silently. A project with a committed `composer.lock`
+but no committed `vendor/composer/installed.json` is a warning on feature branches and a failure on pull requests into
+`main` and on `main`: the drift check cannot compare the module folders without `vendor/`.
+
 **v1.9.1:** a new major can be sent from a project still locked to the old one. `bin/upstream.sh` reads a
 `Module-Major: N` line in the project's commit messages for the module (N above the locked major) and targets `<N>.x`
 if it exists, else `main`. Without the line it targets the locked major's line as before. Before, a breaking change
