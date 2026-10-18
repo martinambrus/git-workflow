@@ -106,6 +106,8 @@ mk_project() { # name require-json topic(yes|no)  -> minimal Composer project wi
       replace:{"drupal/core":"11.4.9"},require:$r,config:{"secure-http":false,"preferred-install":{"*":"dist"}},"minimum-stability":"stable"}' > "$d/composer.json"
   composer_in "$d" update --no-progress >/dev/null 2>&1 || { echo "   composer update failed for $name"; return 1; }
   mkdir -p "$d/.gitea/workflows" && cp "$LAB_ROOT"/seed/project-template/.gitea/workflows/*.yml "$d/.gitea/workflows/"
+  # E2E_CI_REF: run the project's jobs from another ci-tools ref (a test branch) instead of the pinned tag
+  [ -z "${E2E_CI_REF:-}" ] || sed -i "s#--branch v[0-9.]*#--branch $E2E_CI_REF#" "$d/.gitea/workflows/"*.yml
   ensure_repo "$SITE_ORG" "$name" >/dev/null
   ( cd "$d" && git init -q -b main && git config user.name "Dev One" && git config user.email dev@example.test \
       && git add -A && git commit -qm "Initial project" && git push -q "$(admin_url "$SITE_ORG/$name")" main ) >/dev/null 2>&1 || return 1
@@ -136,6 +138,54 @@ for r in $(api GET "/orgs/$MODULE_ORG/repos?limit=200" | jq -r '.[].name|select(
   api DELETE "/repos/$MODULE_ORG/$r" >/dev/null
   dc exec -T packeton app dbal:run-sql "delete from package where name='$MODULE_ORG/$r'" >/dev/null 2>&1; done
 ok "stale line-scenario repos removed"
+
+# --------------------------------------------------------------------------------------------------------------------
+# L11 first: it needs nothing from the scenarios below. A new major from a project pull request with /release_major.
+step "L11. a new major from a project pull request: /release_major (ci-tools from a test branch, not a tag)"
+MOD2="ait_m$ts"; PMOD2="$MODULE_ORG/$MOD2"; PM="m$ts-proj"; CI_REF="wip/e2e-$ts"
+push_ci_branch() { # the lab's ci-tools as it is now, on a branch (not a tag: nothing is published)
+  local d; d=$(mktemp -d -p "$WORK"); cp -a "$LAB_ROOT/seed/tools/ci-tools/." "$d/"
+  ( cd "$d" && git init -q -b main && git config user.name "Main Dev" && git config user.email admin@example.test \
+      && git add -A && git commit -qm "ci-tools under test (e2e)" && git push -q "$(admin_url "$MODULE_ORG/ci-tools")" "HEAD:refs/heads/$1" ) >/dev/null 2>&1; }
+src2=$WORK/major-src; mkdir -p "$src2"; cp -a "$LAB_ROOT/seed/modules/ait_banners/." "$src2/"
+jq --arg n "$PMOD2" '.name=$n' "$src2/composer.json" > "$src2/c.json" && mv "$src2/c.json" "$src2/composer.json"
+seed_module_repo "$MOD2" "$src2"
+wait_for 180 "$PMOD2 v1.0.0 indexed" pk_has "$PMOD2" v1.0.0 && ok "$PMOD2 v1.0.0 seeded and indexed" || die "$PMOD2 is not in Packeton"
+push_ci_branch "$CI_REF" && ok "ci-tools under test is on branch $CI_REF of activit/ci-tools" || die "cannot push the ci-tools test branch"
+E2E_CI_REF=$CI_REF mk_project "$PM" "$(jq -n --arg m "$PMOD2" '{($m):"^1.0"}')" yes && ok "$PM created (locked to ^1.0, jobs from $CI_REF)" || die "$PM"
+[ "$(lock_version "$SITE_ORG/$PM" "$PMOD2")" = v1.0.0 ] && ok "$PM locked to v1.0.0" || bad "$PM lock: $(lock_version "$SITE_ORG/$PM" "$PMOD2")"
+
+d=$WORK/major; git clone -q "$(dev_url "$SITE_ORG/$PM")" "$d" 2>/dev/null
+( cd "$d" && git config user.name "Dev One" && git config user.email dev@example.test && git switch -q -c "major/2.0-$ts" \
+  && echo "/* $ts: 2.0 breaking */" >> "vendor/$PMOD2/css/banner.css" && git commit -qam "Breaking change for 2.0" -m "Module-Major: 2" \
+  && git push -q origin "major/2.0-$ts" ) >/dev/null 2>&1 && ok "developer's breaking change pushed to $PM (commit says Module-Major: 2)" || die "cannot push the breaking change"
+mbr="up/$PM/major-2.0-$ts"
+ppr=$(api POST "/repos/$SITE_ORG/$PM/pulls" "$(jq -n --arg h "major/2.0-$ts" '{title:"Breaking change for 2.0",head:$h,base:"main"}')" | jq -r .number)
+[ -n "$ppr" ] && [ "$ppr" != null ] && ok "project PR $PM#$ppr opened" || die "could not open the project PR"
+wait_for 600 "Upstream MR" bash -c ". '$LAB_ROOT/ops/bin/lib.sh'; [ -n \"\$(api GET '/repos/$PMOD2/pulls?state=open&limit=50' | jq -r '.[]|select(.head.ref==\"$mbr\")|.number')\" ]" \
+  || die "no Upstream MR for the breaking change"
+mr=$(open_pr_number "$PMOD2" "$mbr")
+[ "$(api GET "/repos/$PMOD2/pulls/$mr" | jq -r .base.ref)" = main ] && ok "Upstream opened MR #$mr into main (no 1.x line exists for the project to point it at)" \
+  || bad "MR #$mr targets $(api GET "/repos/$PMOD2/pulls/$mr" | jq -r .base.ref), expected main"
+wait_for 600 "module Checks on MR #$mr" is_success "$PMOD2" "$mbr" && ok "module Checks green on MR #$mr" || bad "module Checks on MR #$mr: $(pr_status "$PMOD2" "$mbr")"
+wait_for 1200 "project Checks on $PM#$ppr" is_success "$SITE_ORG/$PM" "major/2.0-$ts" && ok "project Checks green on $PM#$ppr" || bad "project Checks on $PM#$ppr: $(pr_status "$SITE_ORG/$PM" "major/2.0-$ts")"
+
+api POST "/repos/$SITE_ORG/$PM/issues/$ppr/comments" "$(jq -n --arg b "/release_major $PMOD2 v2.0.0" '{body:$b}')" >/dev/null
+wait_for 900 "reply to /release_major" bash -c ". '$LAB_ROOT/ops/bin/lib.sh'; api GET '/repos/$SITE_ORG/$PM/issues/$ppr/comments?limit=100' | grep -qF 'nothing done' || api GET '/repos/$SITE_ORG/$PM/issues/$ppr/comments?limit=100' | grep -qF 'New major'"
+replies() { api GET "/repos/$SITE_ORG/$PM/issues/$ppr/comments?limit=100" | jq -r '[.[].body]|join("\n")'; }
+replies | grep -qF 'New major `v2.0.0` released' && ok "/release_major: the bot released v2.0.0" || bad "/release_major reply: $(replies | tail -3 | tr '\n' ' ')"
+l1=$(git ls-remote "$(admin_url "$PMOD2")" refs/heads/1.x | cut -f1)
+[ -n "$l1" ] && [ "$l1" = "$(tag_sha "$PMOD2" v1.0.0)" ] && ok "the old line 1.x was created at v1.0.0" || bad "1.x: '${l1:-none}'"
+[ "$(api GET "/repos/$PMOD2/pulls/$mr" | jq -r .merged)" = true ] && ok "MR #$mr merged into main" || bad "MR #$mr not merged"
+t2=$(tag_sha "$PMOD2" v2.0.0); mainsha=$(git ls-remote "$(admin_url "$PMOD2")" refs/heads/main | cut -f1)
+[ -n "$t2" ] && [ "$t2" = "$mainsha" ] && ok "v2.0.0 is on main's merge commit" || bad "v2.0.0 $t2 vs main $mainsha"
+wait_for 180 "v2.0.0 indexed" pk_has "$PMOD2" v2.0.0 && ok "Packeton indexed v2.0.0" || bad "v2.0.0 not indexed"
+c=$(release_result "$PMOD2" v2.0.0); [ "$c" = success ] && ok "Release job for v2.0.0 finished: $c" || bad "Release job for v2.0.0: $c"
+pr_exists "$SITE_ORG/$PM" "update/$MOD2-2.0.0" && bad "$PM got an update PR for 2.0.0 although it is on ^1.0" || ok "$PM (on ^1.0): no update PR for 2.0.0"
+
+api POST "/repos/$SITE_ORG/$PM/issues/$ppr/comments" "$(jq -n --arg b "/release_major $PMOD2 v2.0.0" '{body:$b}')" >/dev/null
+wait_for 600 "refusal of the second /release_major" bash -c ". '$LAB_ROOT/ops/bin/lib.sh'; api GET '/repos/$SITE_ORG/$PM/issues/$ppr/comments?limit=100' | grep -qF 'already exists'"
+replies | grep -qF 'already exists' && replies | grep -qF 'nothing done' && ok "a second /release_major is refused (v2.0.0 exists)" || bad "second /release_major: $(replies | tail -2 | tr '\n' ' ')"
 
 step "L1. base module $PBASE with releases 1.0.0 and 1.0.1"
 src=$WORK/base-src; mkdir -p "$src"; cp -a "$LAB_ROOT/seed/modules/ait_banners/." "$src/"
@@ -357,6 +407,9 @@ else
     uid=$(curl -s "$PACKETON/api/users?$A" | jq -r --arg u "$u" '.[]|select(.username==$u).id'); [ -n "$uid" ] && curl -s -o /dev/null -X DELETE "$PACKETON/api/user/$uid?$A"; done
   for g in "g-legacy$ts" "g-current$ts"; do
     gid=$(curl -s "$PACKETON/api/groups?$A" | jq -r --arg g "$g" '.[]|select(.name==$g).id'); [ -n "$gid" ] && curl -s -o /dev/null -X DELETE "$PACKETON/api/group/$gid?$A"; done
+  api DELETE "/repos/$SITE_ORG/$PM" >/dev/null; api DELETE "/repos/$MODULE_ORG/$MOD2" >/dev/null
+  dc exec -T packeton app dbal:run-sql "delete from package where name='$PMOD2'" >/dev/null 2>&1
+  api DELETE "/repos/$MODULE_ORG/ci-tools/branches/$(printf '%s' "$CI_REF" | jq -sRr @uri)" >/dev/null
   ok "disposable repos, packages and customers removed"
 fi
 rm -rf "$WORK"
