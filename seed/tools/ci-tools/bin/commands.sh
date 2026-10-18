@@ -26,14 +26,14 @@ reply() { api POST "/repos/${REPOSITORY}/issues/${PR}/comments" "$(jq -n --arg b
 pr=$(api GET "/repos/${REPOSITORY}/pulls/${PR}") || { log "#${PR} is not a pull request: ignored"; exit 0; }
 head_ref=$(jq -r .head.ref <<<"$pr")
 
-# ---- in a module repository: forward-port pull requests (fwd/<from>/<sha>-to-<to>) -------------------------------
+# ---- forward-port pull requests in a module repository (fwd/<from>/<sha>-to-<to>) -----------------------------------
 #   /merge          merge it (Checks green)
 #   /release vX.Y.Z merge it (if still open) and tag the merge commit, or tag the line's head if it was merged already
-if [ "${REPOSITORY%%/*}" = "$MODULE_ORG" ]; then
+# Routed by the pull request itself, not by the repository's org: project repositories live in the same org as the
+# modules (activit/drupal-b next to activit/weather), so the org cannot tell them apart. A forward-port PR carries
+# <!-- forward-port:<from>:<sha> --> in its body; every other pull request is a project pull request (below).
+if [[ $(jq -r '.body // ""' <<<"$pr") =~ \<\!--\ forward-port:([^:]+):[0-9a-f]{40}\ --\> ]]; then
   usage() { reply "@${user}: \`${line}\` was not understood. On a forward-port pull request use \`/merge\` or \`/release v<x.y.z>\`."; exit 0; }
-  # a forward-port PR carries <!-- forward-port:<from>:<sha> --> (its head branch is gone once it is merged)
-  [[ $(jq -r '.body // ""' <<<"$pr") =~ \<\!--\ forward-port:([^:]+):[0-9a-f]{40}\ --\> ]] \
-    || { reply "@${user}: commands work here only on forward-port pull requests (and in project pull requests for module changes): nothing done."; exit 0; }
   from=${BASH_REMATCH[1]}
   is_main_dev "$user" "$MODULE_ORG" || { reply "@${user}: only main devs (members of the \`${MODULE_ORG}\` Owners team) can run \`${cmd}\`: nothing done."; exit 0; }
   base=$(jq -r .base.ref <<<"$pr")

@@ -108,3 +108,7 @@ or reminder, and `/release` refuses them (`package_changed`).
 
 **v1.8.6:** Upstream does not re-push an identical bot branch (same parent and tree), so the MR's Checks do not restart;
 `/merge` while Checks are running schedules Gitea's merge-when-checks-succeed.
+
+**v1.8.7:** `commands.sh` routes by the pull request, not by the repository's org: a forward-port PR (its body carries
+`<!-- forward-port:… -->`) goes to the module path, every other PR to the project path. Project repositories live in the
+same org as the modules, so before this every project-PR command was answered with the forward-port message.
