@@ -5,6 +5,7 @@
 #   3. run Update PRs for projects that opted in (repository topic activit-project)
 #
 # Env: GITEA_URL BOT_TOKEN PACKETON_TOKEN REPOSITORY (org/module) TAG   [PACKETON_URL=http://packeton.test]
+#      (update-prs.sh also gets RELEASE_TREE: the release checkout)
 set -euo pipefail
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 . "$here/lib/common.sh"
@@ -43,4 +44,4 @@ done
 [ "${found:-0}" = 1 ] || die "Packeton did not list $want within 5 minutes (webhook? try the update button on the package page)"
 
 # --- 3. update pull requests ---------------------------------------------------------------------------------------
-exec "$here/bin/update-prs.sh" "$package" "$TAG"
+RELEASE_TREE="$work/mod" exec "$here/bin/update-prs.sh" "$package" "$TAG"

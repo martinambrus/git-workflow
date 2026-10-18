@@ -15,6 +15,8 @@ PACKETON_URL=${PACKETON_URL:-http://packeton.test}
 TOPIC=${TOPIC:-activit-project}
 module=${package##*/}; ver=$(release_version "$tag"); branch="update/${module}-${ver}"
 phost=$(echo "$PACKETON_URL" | sed -E 's#^https?://([^/:]+).*#\1#')
+# the release checkout (the module at the tag): the containment checks apply the project's module diff to it
+: "${RELEASE_TREE:?RELEASE_TREE (the module checkout at the release) not set}"
 
 # Composer: Packeton credentials, a private cache (never trust a stale one) and no 401 fallback (finding 8).
 export COMPOSER_AUTH="{\"http-basic\":{\"${phost}\":{\"username\":\"admin\",\"password\":\"${PACKETON_TOKEN}\"}}}"
@@ -25,11 +27,15 @@ export COMPOSER_NO_INTERACTION=1 COMPOSER_ALLOW_SUPERUSER=1 COMPOSER_MEMORY_LIMI
 # never reverse-apply to the release, so they are left out of the "contained" check.
 without_gitea() { awk '/^diff --git /{skip = ($0 ~ /\/\.gitea\//)} !skip' "$1"; }
 
+# module_part PATH < DIFF -> only the sections of the project's diff under PATH (the project install path), which the
+# module repository has at its root: apply them with -p<components of PATH + 1> so the prefix is stripped
+module_part() { awk -v p="$1/" '/^diff --git /{skip = (index($3, "a/" p) != 1)} !skip'; }
+strip_for() { echo $(( $(awk -F/ '{print NF}' <<<"$1") + 1 )); }
+
 # supersede REPO UPDATE_PR MODULE_PATH -> project pull requests whose in-place module change was sent upstream (the
 # Upstream job's marker comment) and is now contained in this release: close them when they change nothing but the
 # module folder, otherwise say what to do. "Contained" = the pull request's own diff of the module folder reverse-
-# applies cleanly to the release (the release may contain more, e.g. other developers' changes). Runs inside the
-# project clone on the update branch (working tree = the release).
+# applies cleanly to the release (the release may contain more, e.g. other developers' changes), checked in RELEASE_TREE.
 supersede() { local repo=$1 upd=$2 path=$3 n head others comments msg pdiff
   local marker="<!-- upstream:${package} -->" seen="<!-- superseded:${package}:${ver} -->"
   while read -r n head; do
@@ -39,7 +45,7 @@ supersede() { local repo=$1 upd=$2 path=$3 n head others comments msg pdiff
     jq -e --arg m "$seen" '.[]|select(.body|contains($m))' <<<"$comments" >/dev/null && continue
     pdiff=$(mktemp); api GET "/repos/${repo}/pulls/${n}.diff" > "$pdiff" || { warn "$repo#$n: cannot read its diff"; continue; }
     others=$(api GET "/repos/${repo}/pulls/${n}/files?limit=100" | jq -r --arg p "${path}/" '.[].filename|select(startswith($p)|not)')
-    if ! without_gitea "$pdiff" | git apply -R --check --include="${path}/*" - 2>/dev/null; then
+    if ! without_gitea "$pdiff" | module_part "$path" | (cd "$RELEASE_TREE" && git apply -R --check -p"$(strip_for "$path")" -) 2>/dev/null; then
       msg="${seen}
 Release \`${tag}\` of \`${package}\` is out (update pull request #${upd}), but it does not contain all of this pull request's changes in \`${path}\` (pushed after the module merge request was merged, or not merged yet). This pull request stays open; the Upstream job keeps the module merge request up to date."
       api POST "/repos/${repo}/issues/${n}/comments" "$(jq -n --arg b "$msg" '{body:$b}')" >/dev/null || warn "$repo#$n: comment failed"
@@ -86,7 +92,7 @@ inplace() { local repo=$1 path=$2 n head comments pdiff b out a sha i m cands=()
     jq -e --arg m "$marker" '.[]|select(.body|contains($m))' <<<"$comments" >/dev/null || continue
     cands+=("$n $head")
     pdiff=$(mktemp)
-    if api GET "/repos/${repo}/pulls/${n}.diff" > "$pdiff" && without_gitea "$pdiff" | git apply -R --check --include="${path}/*" - 2>/dev/null; then
+    if api GET "/repos/${repo}/pulls/${n}.diff" > "$pdiff" && without_gitea "$pdiff" | module_part "$path" | (cd "$RELEASE_TREE" && git apply -R --check -p"$(strip_for "$path")" -) 2>/dev/null; then
       contained+=("$n $head"); fi
     rm -f "$pdiff"
   done < <(api GET "/repos/${repo}/pulls?state=open&limit=50" | jq -r --arg b "$branch" '.[]|select(.head.ref!=$b)|"\(.number) \(.head.ref)"')
