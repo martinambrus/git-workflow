@@ -684,7 +684,7 @@ into a merge request in the module repo.
   - the PR's module change is **not (fully) released** (pushed after the MR was merged): it stays open.
   If the PR conflicts with `main` after the update (`main` changed `composer.lock` meanwhile), the bot comments the
   exact commands to fix it (take main's version of the conflicted Composer files, `composer update <module>`).
-  ⚠ Never commit to an `up/...` branch by hand: it is rebuilt on every push of the project branch.
+  ⚠ Never commit to an `up/...` branch by hand: it is rebuilt on every push to the project pull request.
   ⚠ Projects and modules set up before ci-tools `v1.8.9` (README findings 37–41) need the new workflow files first:
   `upstream.yml` + `checks.yml` + `commands.yml` in the project; `release.yml`, `release-reminder.yml`,
   `forward-port.yml` and `commands.yml` on the module's release lines (ci-tools `v1.8.9`); and `bot` on the module's

@@ -193,7 +193,7 @@ Merge through the usual project merge request. While a module is on 0.x, `^0.1` 
 
 **6.4 Push the project branch and open the pull request** into `main`: `git push -u origin feature/promo-banner`.
 
-**6.5 The Upstream job sends the module changes.** It runs on every push to a project branch and when a project pull request is opened (section 12). It compares each of our module folders with the release the project is locked to, after reversing the client patches the project declares for that module (11). If a folder differs, the job:
+**6.5 The Upstream job sends the module changes.** It runs when a project pull request is opened or gets new commits (section 12). A plain branch push does not open a merge request, so a branch in progress reaches the module repository only once its pull request exists. It compares each of our module folders with the release the project is locked to, after reversing the client patches the project declares for that module (11). If a folder differs, the job:
 
 - cuts a bot branch in the module repository (`up/shop-a/feature-promo-banner`) **from the locked tag**, never from a moving `main` or `1.x`, applies the difference as one cumulative commit listing the project commits and their authors, checks that the branch reproduces the project folder exactly, and pushes it (not again when an identical branch is already there, so its Checks do not restart);
 - opens or updates a merge request into `<locked major>.x` if that branch exists, else `main`;
@@ -337,7 +337,7 @@ All automation runs as Gitea Actions workflows on our own runners, so nobody has
 | Packeton webhook (each module repo: push, create, delete) | Packeton re-reads the repository and indexes new versions and `dev-` branches (Appendix B) |
 | Checks (project repo: every push and every pull request into `main`; required) | the project checks 1 to 4 below |
 | Checks (module repo: pull requests into `main` and `<N>.x`; required) | check 5 below |
-| Upstream (project repo: push to any branch, pull request opened) | 6.5: compares each module folder with its locked release (client patches reversed), rebuilds the bot branch from the locked tag, opens or updates the merge request, comments in the developer's pull request |
+| Upstream (project repo: pull request opened or updated) | 6.5: compares each module folder with its locked release (client patches reversed), rebuilds the bot branch from the locked tag, opens or updates the merge request, comments in the developer's pull request |
 | Commands (project and module repos: new comment `/merge …` or `/release …`) | 8.1, 8.3, 11: main devs only; merges a module merge request or a forward-port, tags a release |
 | Release reminder (module repo: pull request closed) | after a merged Upstream merge request or forward-port: names the next version and asks for `/release`, unless it changes nothing in the package or is already released; updates "Where this change went" |
 | Release (module repo: tag `v*`) | checks the tag and `composer.json`, waits until Packeton lists the version, then delivers it (section 9): into the developer's pull request where it came from, update pull requests in the other opted-in projects; pre-releases stop after the checks |

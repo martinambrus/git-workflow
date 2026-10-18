@@ -1,14 +1,11 @@
 name: upstream
 # Sends in-place changes of shared modules to the module repository as a merge request (plan 6.5).
 # No `uses:` steps: everything is plain shell in our runner image (plan 2.4).
-# It also runs when a pull request is opened: on the branch's first push the project PR cannot exist yet, and the
-# job links the merge request in the project PR. The concurrency group queues a push run and a PR run of the same
-# branch, so they never race to open the merge request twice.
+# It runs when a pull request is opened or gets new commits, so a branch that is only pushed does not open a merge
+# request in the module repository before its pull request exists. The job links the merge request in the project PR.
 on:
-  push:
-    branches: ['**']
   pull_request:
-    types: [opened, reopened]
+    types: [opened, reopened, synchronize]
 
 concurrency:
   group: upstream-${{ github.head_ref || github.ref_name }}
