@@ -68,6 +68,9 @@ Closed automatically by the Release job, and the branch \`${head}\` was deleted 
   done < <(api GET "/repos/${repo}/pulls?state=open&limit=50" | jq -r --arg b "$branch" '.[]|select(.head.ref!=$b)|"\(.number) \(.head.ref)"')
 }
 
+# major_of VERSION -> the major number of a version (v2.0.0 -> 2)
+major_of() { local v=${1#v}; echo "${v%%.*}"; }
+
 # inplace REPO MODULE_PATH -> the project pull request this release came from gets the release itself: when exactly one
 # open pull request carries the Upstream job's marker for this package and its own module diff is contained in the
 # release (working tree = the release, see supersede), run `composer update <package>` on THAT branch and push one
@@ -94,7 +97,11 @@ inplace() { local repo=$1 path=$2 n head comments pdiff b out a sha i m cands=()
 
   b=$(mktemp -d)
   git clone -q --depth 1 --branch "$head" "${GITEA_URL}/${repo}.git" "$b/p" || { warn "$repo: cannot clone $head"; INPLACE_SKIP=$n; return 1; }
-  out=$(cd "$b/p" && composer update "$package" --no-interaction --no-progress --no-scripts 2>&1) \
+  # a new major raises the project's constraint to ^N.0 (the code of that pull request was written against it);
+  # any other release keeps the constraint and updates the lock only
+  local how=(update "$package")
+  [ "${new_major:-0}" = 1 ] && how=(require "${package}:^$(major_of "$ver").0")
+  out=$(cd "$b/p" && composer "${how[@]}" --no-interaction --no-progress --no-scripts 2>&1) \
     || { echo "$out" | tail -10; warn "$repo#$n: composer update failed on $head"; INPLACE_SKIP=$n; return 1; }
   if grep -qE "could not be fully loaded|required authentication" <<<"$out"; then
     warn "$repo#$n: Packeton authentication error on $head: refusing to trust the result"; INPLACE_SKIP=$n; return 1; fi
@@ -165,6 +172,14 @@ for repo in "${repos[@]}"; do
     log "$repo already has branch $branch (closed/merged earlier?): skipping"; echo "::endgroup::"; continue
   fi
 
+  if [ "$(major_of "$ver")" -gt "$(major_of "${before:-0}")" ]; then
+    # a new major moves only the project pull request the change came from; other projects stay on their major
+    new_major=1
+    if inplace "$repo" "$(install_path "$package")"; then echo "::endgroup::"; continue; fi
+    log "$repo stays on $before: a new major moves only the project pull request the change came from"
+    echo "::endgroup::"; continue
+  fi
+  new_major=0
   log "$repo: $package $before -> composer update"
   out=$(composer update "$package" --no-interaction --no-progress --no-scripts 2>&1) || { echo "$out" | tail -15; warn "composer update failed in $repo"; rc=1; echo "::endgroup::"; continue; }
   if grep -qE "could not be fully loaded|required authentication" <<<"$out"; then

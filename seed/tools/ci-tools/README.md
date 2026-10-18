@@ -125,6 +125,11 @@ rejected, so the Release job adds the release to that pull request instead of op
 but no committed `vendor/composer/installed.json` is a warning on feature branches and a failure on pull requests into
 `main` and on `main`: the drift check cannot compare the module folders without `vendor/`.
 
+**v1.9.5:** a new major reaches the project pull request its change came from. The Release job (`bin/update-prs.sh`)
+ran `composer update` for the new tag, which keeps the project's `^1.0` constraint, so the pull request stayed on `1.x`.
+Now a new major raises the constraint to `^N.0` (`composer require activit/<module>:^N.0`) on that pull request only, and
+its Checks then compare the module folder with the new lock. Other projects are not moved to a new major.
+
 **v1.9.4:** `/release_major` and `/merge` find the module merge request by the `upstream-source` marker in its body, not
 by its head branch: Gitea deletes the `up/...` branch when a merge request is merged, so a merged one could not be found
 (the reply was "no merge request from the Upstream job exists").
