@@ -192,16 +192,18 @@ containing `dev` and `bot`; you hold a `BOT_TOKEN`.
   cp -a $REPO/seed/tools/ci-tools/. ci-tools/ && cd ci-tools
   git add -A && git commit -m "ci-tools: upstream, release, update-prs, checks, forward-port"
   git branch -M main && git push -u origin main
-  for t in v1.0.0 v1.1.0 v1.2.0 v1.3.0 v1.3.1 v1.4.0 v1.5.0 v1.6.0 v1.7.0 v1.8.0 v1.8.1 v1.8.2 v1.8.3 v1.8.4 v1.8.5 v1.8.6; do git tag -a $t -m "ci-tools $t"; done
+  for t in $(cat $REPO/seed/tools/ci-tools.tags); do git tag -a $t -m "ci-tools $t"; done
   git push origin --tags
   ```
   ✅ the repo shows `bin/upstream.sh`, `bin/release.sh`, `bin/update-prs.sh`, `bin/check-project.sh`,
-  `bin/check-module.sh`, `bin/forward-port.sh`, `bin/release-reminder.sh`, `bin/commands.sh`, and sixteen tags. 📸
-  *Why sixteen tags:* a tag is never moved; the workflow stubs pin `v1.2.0` (module checks) and `v1.8.6` (everything
-  else: project checks, upstream, commands, release, release reminder, forward-port); the older tags are history. In
-  your own setup you would publish real versions.
+  `bin/check-module.sh`, `bin/forward-port.sh`, `bin/release-reminder.sh`, `bin/commands.sh`, and nineteen tags
+  (`v1.0.0` to `v1.8.9`). 📸
+  *Why so many tags:* a tag is never moved, and the workflow stubs pin **`v1.8.9`** everywhere (module checks, project
+  checks, upstream, commands, release, release reminder, forward-port). The older tags are history: each one is what a
+  stub pinned at the time. A later version (`v1.9.1`, the `/release_major` command of task 9.1b) is added the same way
+  when it is released. In your own setup you would publish real versions.
 
-**Done when:** `git ls-remote --tags http://gitea.test:3000/activit/ci-tools.git` lists the sixteen tags.
+**Done when:** `git ls-remote --tags http://gitea.test:3000/activit/ci-tools.git` lists the nineteen tags.
 
 ---
 
@@ -258,8 +260,9 @@ key, and name `activit/<repo>`.
   1. pattern `main`: **Disable Push**, **Enable Status Check** with the status check pattern `checks / checks (pull_request)`,
      and tick **Administrators must follow branch protection rules** (otherwise an admin can still force-merge a red PR).
   2. pattern `[0-9]*.x` (matches `1.x`, `2.x`, not `feat.x`): same status check and admin setting, but under *Push* choose
-     **Allowlist Restricted Push** and add `admin` under **Allowlisted users for pushing** (creating a release line is a
-     push; only the main dev may do it). 📸 both rules
+     **Allowlist Restricted Push** and add `admin` and `bot` under **Allowlisted users for pushing**. Creating a release
+     line is a push: the main dev does it by hand, and the bot does it for `/release_major` (9.1b). Developers are
+     refused. 📸 both rules
      ⚠ The status name only exists after the first run of the checks workflow (5.6); typing it into the rule is fine.
   Also *Settings → Repository → Pull Requests*: tick **Delete pull request branch after merge by default**. 
 - [ ] **5.6 First pull request through the gate.** Prove the rules work:
@@ -458,7 +461,7 @@ and implements the new hook; only **shop-b** gets it.
 - [ ] **9.1 Create the 1.x line first, then develop 2.0 on `main`:**
   ```bash
   cd $REPO/workspace/ait_banners && git switch main && git pull
-  git branch 1.x v1.1.0 && git push -u origin 1.x     # allowed: you are on the push allowlist of [0-9]*.x; -u sets tracking
+  git branch 1.x v1.1.0 && git push -u origin 1.x     # allowed: admin is on the push allowlist of [0-9]*.x; -u sets tracking
   git switch -c refactor/2.0
   git apply $REPO/manual/assets/ait_banners-2.0.0-refactor.patch
   git add -A && git commit -m "2.0: rename the alter hook, require Drupal 11"
@@ -466,6 +469,23 @@ and implements the new hook; only **shop-b** gets it.
   ```
   PR → Checks → merge. 📸 `1.x` in the branch list (it is protected by the glob rule without anyone creating a
   rule for it: try a direct push as `dev`: refused).
+- [ ] **9.1b Alternative to 9.1 and 9.2: `/release_major` does both in one reply** (ci-tools `v1.9.1` and later, once it
+  is released). Use it for the major itself, from a project that is still locked to 1.x:
+  1. Make the breaking change in shop-a's copy of the module, as in 12.1 (the rename, or any change that needs 2.0). Commit
+     it with a trailer line of its own: `Module-Major: 2`. Push the branch and open the PR into `main`.
+     ✅ Upstream opens the module MR **into `main`**, although shop-a is locked to 1.x. The trailer names the new major;
+     without it the MR goes to `1.x`, as in 12.2.
+  2. Checks green on the module MR and on the project PR. Then, as the main dev, reply in the project PR:
+     `/release_major activit/ait_banners v2.0.0`
+  3. ✅ The bot creates `1.x` at `v1.1.0`, merges the module MR into `main` and tags `v2.0.0` on the merge commit. Its reply
+     starts "New major `v2.0.0` released". The Release job then runs as in 9.3.
+  4. ✅ A second `/release_major` for the same version is refused ("already exists … nothing done").
+  The reply is refused, with the reason, unless all of these hold: the project is locked to the major before the new one;
+  the version is `vN.0.0`, with N one above the lock; no `N.x` branch and no `vN.*` tag exist; `main` has no unreleased
+  package change since its last release; the module MR is open, into `main`, with green Checks. ⚠ An MR that was already
+  merged into `main` is refused: release that change by hand (9.2) in that case.
+  Then continue with 9.3 and 9.4 as written.
+
 - [ ] **9.2 Tag 2.0.0:**
   ```bash
   git switch main && git pull && git tag -a v2.0.0 -m "2.0.0: hook renamed" && git push origin v2.0.0
@@ -625,8 +645,9 @@ into a merge request in the module repo.
   - one comment from `bot`: "**This pull request changes the shared module `activit/ait_banners`** … becomes mergeable
     when that change is released … Sent to the module repository as …/pulls/N (target `1.x`) … **Main devs:** review
     the change in …/pulls/N, then reply here with `/merge activit/ait_banners#N`". (The Upstream job runs on the push
-    **and** when the PR is opened; shop-a is locked to 1.x and `1.x` exists, so the target is `1.x`. If the module MR
+    **and** when the PR is opened; shop-a is locked to 1.x and `1.x` exists, so the target is `1.x` (a commit that says `Module-Major: 2` targets `main`: 9.1b). If the module MR
     was already merged, the comment says so and asks for `/release` instead: no second MR.)
+  - the project's own `.gitea/` folder is never sent upstream (ci-tools `v1.8.8`): only the module folder is compared.
   - the Checks are **red** on purpose ("drift in our own modules … expected for an in-place module change"), and the
     merge button refuses the PR, for admins too (5.5/6.6). 📸 the comment and the red check.
 - [ ] **12.3 The main dev reviews and replies `/merge activit/ait_banners#N`** in the project PR. Review the change in
@@ -666,9 +687,9 @@ into a merge request in the module repo.
   If the PR conflicts with `main` after the update (`main` changed `composer.lock` meanwhile), the bot comments the
   exact commands to fix it (take main's version of the conflicted Composer files, `composer update <module>`).
   ⚠ Never commit to an `up/...` branch by hand: it is rebuilt on every push of the project branch.
-  ⚠ Projects and modules set up before ci-tools `v1.8.6` (README findings 37–41) need the new workflow files first:
+  ⚠ Projects and modules set up before ci-tools `v1.8.9` (README findings 37–41) need the new workflow files first:
   `upstream.yml` + `checks.yml` + `commands.yml` in the project; `release.yml`, `release-reminder.yml`,
-  `forward-port.yml` and `commands.yml` on the module's release lines (ci-tools `v1.8.6`); and `bot` on the module's
+  `forward-port.yml` and `commands.yml` on the module's release lines (ci-tools `v1.8.9`); and `bot` on the module's
   protected-tag list.
   Replies (`/merge`, `/release`) run the `commands.yml` of the repo's **default branch** (`main`): until it is there,
   a reply does nothing at all (no run, no answer). Merge the forward-port PR that carries the new workflows to `main`
@@ -716,10 +737,10 @@ The workflow stubs in `seed/` contain these literally. Use them, or edit the stu
 | --- | --- |
 | Gitea URL / Packeton URL | `http://gitea.test:3000` / `http://packeton.test` |
 | Organizations | `activit` (modules, `ci-tools`), `sites` (projects) |
-| Users | `admin` (main dev: tags, release lines), `dev`, `bot` (automation) |
+| Users | `admin` (main dev: tags, release lines), `dev`, `bot` (automation: tags `v*` for `/release`, creates and pushes `N.x` lines for `/release_major`) |
 | Org secrets (both orgs) | `BOT_TOKEN`, `PACKETON_TOKEN` |
 | Runner label | `activit-runner` |
-| ci-tools tags | `v1.2.0` module checks, `v1.8.6` everything else (project checks, upstream, commands, release, release reminder, forward-port) |
+| ci-tools tags | `v1.8.9` everywhere (module and project workflows); `v1.9.1` once it is released (`/release_major`, 9.1b) |
 | Status check required on `main` and `[0-9]*.x` | `checks / checks (pull_request)` |
 | Opt-in topic for update PRs | `activit-project` |
 | Default branch | `main` |
@@ -732,7 +753,7 @@ For every module repo (`ait_banners`, `ait_banners_ribbon`, ...):
 - [ ] seeded with the module files **and** `seed/module-template/.gitea` (checks, release, forward-port, release-reminder, commands workflows)
 - [ ] protected tag pattern `v*`, allowed users `admin` and `bot` (bot: for `/release`)
 - [ ] branch rule `main` (disable push; status `checks / checks (pull_request)`; administrators must follow the rules)
-- [ ] branch rule `[0-9]*.x` (push whitelist `admin`; same status check; administrators must follow the rules)
+- [ ] branch rule `[0-9]*.x` (push whitelist `admin` and `bot`; same status check; administrators must follow the rules)
 - [ ] delete branch after merge
 - [ ] registered in Packeton (Submit → VCS (auto))
 - [ ] webhook to Packeton **with** `composer_package_name=activit/<repo>` (push, branch/tag creation, deletion)
@@ -764,6 +785,11 @@ For every project repo (`shop-a`, `shop-b`):
 | Workflow fails at `git clone .../ci-tools` | tag missing (4.2) or `BOT_TOKEN` secret not set on that organization |
 | New repo/branch "not found" or "repository is empty" for ~a minute | Gitea's async bookkeeping (findings 25, 27, 34): wait, then retry |
 | A `dev-up/...` version of a deleted branch lingers in Packeton | `wfb exec -u www-data packeton app packagist:update activit/<module> --delete-before` (finding 18) |
+| `/release_major` refused: "is locked to …" | the project must be locked to the major before the new one (9.1b) |
+| `/release_major` refused: "`N.x` already exists" or a `vN.*` tag exists | the major is already released: use `/release` on its line |
+| `/release_major`: "Gitea refused to create `N-1.x`" | the bot is missing from the `[0-9]*.x` push allowlist (5.5, Appendix B) |
+| Upstream opened the MR into `1.x` for a breaking change | the commit has no `Module-Major: N` trailer (9.1b); add it and push again |
+| `/release_major` refused: "no commit … says `Module-Major`" | the trailer is missing or misspelled: it must be its own line, exactly `Module-Major: 2` |
 | You want to start over | `./lab bare destroy` then `./lab bare up` |
 
 ## Appendix E — screenshot list
