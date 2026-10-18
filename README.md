@@ -283,7 +283,8 @@ Google Chrome at `/opt/google/chrome/chrome` for the browser MCP.
 ## What `./lab up` creates
 
 - **Gitea** (pinned image) with Actions on; orgs `activit` (modules) and `sites` (projects); team `devs`
-  (users `dev` and `bot`, write access); org secrets `BOT_TOKEN` and `PACKETON_TOKEN`.
+  (users `dev` and `bot`, write access); org secrets `BOT_TOKEN` and `PACKETON_TOKEN` (the admin token). Each project
+  repository has its own repo secret `PACKETON_TOKEN` for its own Packeton user (manual 6.2b).
 - **Packeton** (pinned image), admin user, read access to Gitea.
 - **Runner** (`act_runner`) with labels `ubuntu-latest` and `activit-runner`, both running our own image
   `activit-runner:local` (PHP 8.3, Composer, git, curl, jq, openssh). Workflows must use `run:` steps only.

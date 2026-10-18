@@ -15,6 +15,7 @@ jobs:
         env:
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
           PACKETON_TOKEN: ${{ secrets.PACKETON_TOKEN }}
+          # PACKETON_USER: <the project's own Packeton user> (plan 10; default admin)
         run: |
           set -euo pipefail
           git clone -q --depth 1 --branch v1.9.7 \

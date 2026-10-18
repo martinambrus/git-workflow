@@ -150,7 +150,8 @@ containing `dev` and `bot`; you hold a `BOT_TOKEN`.
   Credentials* page is the alternative for **SSH keys**; we did not exercise it. 📸 `cat` of the two files with the
   token masked.
 - [ ] **2.5 Organization secrets** (Gitea, as `admin`): for **both** `activit` and `sites` → *Settings → Actions →
-  Secrets → Add Secret*: `BOT_TOKEN` = the bot token, `PACKETON_TOKEN` = the Packeton token. 📸 the secrets list
+  Secrets → Add Secret*: `BOT_TOKEN` = the bot token, `PACKETON_TOKEN` = the Packeton admin token (the modules'
+  Release job uses it). Projects get their own user's token as a repo secret instead (6.2b). 📸 the secrets list
   (values are hidden).
 
 **Done when:** `curl -u admin:$PACKETON_TOKEN http://packeton.test/api/packages` returns `{"packageNames":[]}`.
@@ -315,10 +316,26 @@ push to `main` is refused; a `dev` user cannot push a `v*` tag.
   ```
   DDEV copies `~/.ddev/homeadditions/` into each web container's home on every start.
   ⚠ Finding 36: `ddev composer config --global ...` is stored **inside the container** and is lost on `ddev poweroff`
-  or a rebuild, after which Packeton answers 401. Finding 9 (per-project credential) is covered by the same file.
+  or a rebuild, after which Packeton answers 401. This file is the default for projects without their own user.
   Keep the file outside any repository (not in a project's `.ddev/`), so the token can never be committed.
+  A project with its own Packeton user (6.2b) overrides this file with its own `auth.json` in the project folder.
   ⚠ Finding 35: if you run these through CI / ssh / an IDE task, append `</dev/null` to `ddev composer ...`,
   otherwise it hangs silently.
+- [ ] **6.2b The project's own Packeton user** (plan 10). Each project logs in to Packeton as itself, so Packeton can
+  limit what each project gets. The admin token stays with the modules.
+  1. Create the user (quiet, so the token is not printed):
+     `docker compose --project-directory $REPO/ops/bare -f $REPO/ops/bare/docker-compose.yml exec -T packeton app packagist:user:manager shop-a -q --email=shop-a@example.test --password=<random>`
+  2. *Settings → My groups → Create group*: **Name** `shop-a`; tick **`activit/weather`**; **Version** `*` (or the
+     constraint the project may take). Then *My users → `shop-a`*: **ACL Groups** `shop-a`, **Full read access** off.
+     ✅ `curl -s -o /dev/null -w '%{http_code}' -u shop-a:<token> http://packeton.test/p2/activit/weather.json` prints `200`.
+  3. Repo secret of `sites/shop-a` (it overrides the org secret): `PACKETON_TOKEN` = that user's API token, from
+     `packagist:user:manager shop-a --show-token` (never pasted into a file that is committed).
+  4. In the project's `checks.yml`, next to the token: `PACKETON_USER: shop-a` (ci-tools v1.9.7 and later; the default
+     is `admin`, which the project's token no longer matches).
+  5. In the project folder, git-ignored (add `auth.json` to `.git/info/exclude` or to the project's `.gitignore`), mode 600:
+     `{ "http-basic": { "packeton.test": { "username": "shop-a", "password": "<token>" } } }`. DDEV's Composer reads it
+     from the project root, so it takes precedence over the default file above.
+
 - [ ] **6.3 Point the project at Packeton** (plan 2.5) and install the module:
   ```bash
   ddev composer config repositories.packeton '{"type":"composer","url":"http://packeton.test"}'
@@ -737,7 +754,7 @@ The workflow stubs in `seed/` contain these literally. Use them, or edit the stu
 | Gitea URL / Packeton URL | `http://gitea.test:3000` / `http://packeton.test` |
 | Organizations | `activit` (modules, `ci-tools`), `sites` (projects) |
 | Users | `admin` (main dev: tags, release lines), `dev`, `bot` (automation: tags `v*` for `/release`, creates and pushes `N.x` lines for `/release_major`) |
-| Org secrets (both orgs) | `BOT_TOKEN`, `PACKETON_TOKEN` |
+| Org secrets (both orgs) | `BOT_TOKEN`, `PACKETON_TOKEN` (admin token). Project repos: repo secret `PACKETON_TOKEN` of their own Packeton user (6.2b) |
 | Runner label | `activit-runner` |
 | ci-tools tags | `v1.9.7` everywhere (module and project workflows), including `/release_major` (9.1b) |
 | Status check required on `main` and `[0-9]*.x` | `checks / checks (pull_request)` |
