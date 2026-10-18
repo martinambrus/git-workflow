@@ -120,3 +120,14 @@ no longer opens a merge request in the module repository.
 **v1.8.9:** `update-prs.sh` checks whether a project pull request's module change is in the release without its
 `.gitea/` files (CI, excluded from the package): the module part of a pull request that also bumped the pins is no longer
 rejected, so the Release job adds the release to that pull request instead of opening a separate update pull request.
+
+**v1.9.1:** a new major can be sent from a project still locked to the old one. `bin/upstream.sh` reads a
+`Module-Major: N` line in the project's commit messages for the module (N above the locked major) and targets `<N>.x`
+if it exists, else `main`. Without the line it targets the locked major's line as before. Before, a breaking change
+sent from a 1.x project always went to `1.x`.
+
+`bin/commands.sh` gets `/release_major <org>/<module> vN.0.0`, the first release of a new major, from a project pull
+request whose commits say `Module-Major: N`. Refused unless the project is locked to N-1, the module has no `N.x`
+line and no `vN.*` tag, main's last release of N-1 is the newest thing on main, and the module merge request into `main`
+is open with green Checks. Then it creates `<N-1>.x` at that release, merges the merge request and tags `vN.0.0` on the
+merge commit. The bot may create release lines (`ops/bin/lib.sh`: the `[0-9]*.x` rule whitelists it).

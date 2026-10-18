@@ -88,9 +88,13 @@ for entry in "${mods[@]}"; do
   cp -a "$cand/." "$base/" && rm -rf "$base/.gitea" && git -C "$base" add -A
   git -C "$base" diff --cached --binary > "$work/changes.patch"
 
-  # target line: <major>.x if that branch exists, else main
+  # target line: the major a `Module-Major: N` trailer names (N above the locked major: a new major), else the locked
+  # major. <N>.x if that branch exists, else main, so a new major's change lands on main until its line exists.
   major=${version#v}; major=${major%%.*}
-  if git -C "$mod" ls-remote --exit-code --heads origin "${major}.x" >/dev/null 2>&1; then target="${major}.x"; else target=main; fi
+  want=$(git log --format=%B "$base_ref"..HEAD -- "$path" | sed -n 's/^Module-Major: *\([0-9][0-9]*\) *$/\1/p' | tail -1)
+  [ "${want:-0}" -gt "$major" ] || want=
+  line=${want:-$major}
+  if git -C "$mod" ls-remote --exit-code --heads origin "${line}.x" >/dev/null 2>&1; then target="${line}.x"; else target=main; fi
 
   existing=$(api GET "/repos/${MODULE_ORG}/${short}/pulls?state=open&limit=50" | jq -r --arg h "$bot_branch" '.[]|select(.head.ref==$h)|.number' | head -1)
 

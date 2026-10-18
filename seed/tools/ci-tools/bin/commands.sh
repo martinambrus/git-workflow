@@ -5,6 +5,9 @@
 #   /merge <org>/<module>#<n>          merge the module merge request the Upstream job opened for THIS pull request
 #   /release <org>/<module> v<x.y.z>   tag that version on the module's release line; the Release job then adds the
 #                                      release to this pull request
+#   /release_major <org>/<module> vN.0.0  a new major from this pull request's breaking change (its commits say
+#                                      `Module-Major: N`): creates the old line <N-1>.x from its last release, merges the
+#                                      module merge request into main and tags vN.0.0 there
 # Only main devs (members of the module org's Owners team) may run them. Every command gets an answer.
 # The comment is read through the API by its id: its text never becomes part of a shell command.
 #
@@ -18,7 +21,7 @@ project=${REPOSITORY##*/}
 c=$(api GET "/repos/${REPOSITORY}/issues/comments/${COMMENT_ID}") || die "cannot read comment ${COMMENT_ID}"
 user=$(jq -r '.user.login' <<<"$c")
 line=$(jq -r '.body' <<<"$c" | head -1 | tr -d '\r')
-case $line in /merge|/merge\ *|/release\ *) ;; *) log "not a command: nothing to do"; exit 0 ;; esac
+case $line in /merge|/merge\ *|/release\ *|/release_major\ *) ;; *) log "not a command: nothing to do"; exit 0 ;; esac
 read -r cmd arg1 arg2 _ <<<"$line"
 log "$user: $cmd ${arg1:-} ${arg2:-}"
 
@@ -41,6 +44,7 @@ if [[ $(jq -r '.body // ""' <<<"$pr") =~ \<\!--\ forward-port:([^:]+):[0-9a-f]{4
   case $cmd in
     /merge)   [ -z "${arg1:-}" ] || usage ;;
     /release) [[ ${arg1:-} =~ ^v([0-9]+)\.[0-9]+\.[0-9]+$ ]] && [ -z "${arg2:-}" ] || usage; version=$arg1; major=${BASH_REMATCH[1]} ;;
+    *) usage ;;
   esac
   [ "$merged" = true ] || [ "$state" = open ] || { reply "@${user}: this pull request was closed without merging: nothing done."; exit 0; }
   [ "$cmd" = /merge ] && [ "$merged" = true ] && { reply "@${user}: already merged."; exit 0; }
@@ -100,7 +104,7 @@ ${list}"
 fi
 
 # ---- in a project repository: the developer's pull request ---------------------------------------------------------
-usage() { reply "@${user}: \`${line}\` was not understood. Use \`/merge ${MODULE_ORG}/<module>#<number>\` or \`/release ${MODULE_ORG}/<module> v<x.y.z>\`."; exit 0; }
+usage() { reply "@${user}: \`${line}\` was not understood. Use \`/merge ${MODULE_ORG}/<module>#<number>\`, \`/release ${MODULE_ORG}/<module> v<x.y.z>\` or \`/release_major ${MODULE_ORG}/<module> v<N>.0.0\`."; exit 0; }
 [ "$(jq -r .state <<<"$pr")" = open ] || { reply "@${user}: this pull request is not open: nothing done."; exit 0; }
 
 case $cmd in
@@ -109,6 +113,9 @@ case $cmd in
   /release) [[ ${arg1:-} =~ ^([A-Za-z0-9_.-]+)/([A-Za-z0-9_.-]+)$ ]] || usage
             org=${BASH_REMATCH[1]}; mrepo=${BASH_REMATCH[2]}
             [[ ${arg2:-} =~ ^v([0-9]+)\.[0-9]+\.[0-9]+$ ]] || usage; version=$arg2; major=${BASH_REMATCH[1]} ;;
+  /release_major) [[ ${arg1:-} =~ ^([A-Za-z0-9_.-]+)/([A-Za-z0-9_.-]+)$ ]] || usage
+            org=${BASH_REMATCH[1]}; mrepo=${BASH_REMATCH[2]}
+            [[ ${arg2:-} =~ ^v([0-9]+)\.0\.0$ ]] || usage; version=$arg2; major=${BASH_REMATCH[1]} ;;
 esac
 module="${org}/${mrepo}"
 [ "$org" = "$MODULE_ORG" ] || { reply "@${user}: only \`${MODULE_ORG}/*\` modules can be handled here: nothing done."; exit 0; }
@@ -134,6 +141,66 @@ if [ "$cmd" = /merge ]; then
     reply "Merged ${GITEA_URL}/${module}/pulls/${mr} into \`$(jq -r .base.ref <<<"$m")\` (requested by @${user}). The release question follows in a moment."
   else
     reply "@${user}: Gitea refused to merge ${module}#${mr} (conflict, or a branch rule): open it and merge it there."
+  fi
+  exit 0
+fi
+
+# /release_major: the first release of a new major. Refused when the new major already has a line or a tag, when the
+# project is not locked to the major before it, when the change does not name the new major, or when main has
+# unreleased changes (the old line would miss them). Order: the old line <N-1>.x first (a failure after that leaves
+# nothing behind that matters), then the merge request into main, then vN.0.0 on the merge commit.
+if [ "$cmd" = /release_major ]; then
+  api GET "/repos/${REPOSITORY}/issues/${PR}/comments?limit=100" | jq -e --arg m "<!-- upstream:${module} -->" '.[]|select(.body|contains($m))' >/dev/null \
+    || { reply "@${user}: this pull request has no change to \`${module}\` (no Upstream comment): nothing done."; exit 0; }
+  locked=$(api GET "/repos/${REPOSITORY}/raw/composer.lock?ref=$(printf '%s' "$head_ref" | jq -sRr @uri)" | jq -r --arg p "$module" '.packages[]|select(.name==$p)|.version' | head -1)
+  lmajor=${locked#v}; lmajor=${lmajor%%.*}
+  [[ $lmajor =~ ^[0-9]+$ ]] && [ "$major" -eq $((lmajor + 1)) ] \
+    || { reply "@${user}: this project is locked to \`${module}\` \`${locked:-?}\`; \`/release_major\` starts the next major after it, so use \`/release_major ${module} v$((lmajor + 1)).0.0\`: nothing done."; exit 0; }
+
+  work=$(mktemp -d)
+  git clone -q "${GITEA_URL}/${REPOSITORY}.git" "$work/p" || { reply "@${user}: cannot read ${REPOSITORY}: nothing done."; exit 0; }
+  git -C "$work/p" log --format=%B "origin/main..origin/${head_ref}" > "$work/messages"
+  grep -qx "Module-Major: ${major}" "$work/messages" \
+    || { reply "@${user}: no commit of this pull request says \`Module-Major: ${major}\`: nothing done."; exit 0; }
+
+  git clone -q "${GITEA_URL}/${module}.git" "$work/m" || { reply "@${user}: cannot read ${module}: nothing done."; exit 0; }
+  git -C "$work/m" rev-parse -q --verify "refs/tags/${version}" >/dev/null && { reply "@${user}: \`${version}\` already exists in ${module}: nothing done."; exit 0; }
+  [ -z "$(git -C "$work/m" tag -l "v${major}.*")" ] || { reply "@${user}: ${module} already has a \`v${major}.*\` release, so the ${major}.x line exists: use \`/release\`: nothing done."; exit 0; }
+  git -C "$work/m" rev-parse -q --verify "refs/remotes/origin/${major}.x" >/dev/null && { reply "@${user}: \`${major}.x\` already exists in ${module}: nothing done."; exit 0; }
+
+  # the old line starts at main's last release of the locked major, and main may hold nothing unreleased on top of it
+  latest=$(latest_tag "$work/m" "origin/main")
+  [ -n "$latest" ] && [ "${latest#v${lmajor}.}" != "$latest" ] \
+    || { reply "@${user}: main of ${module} has no \`v${lmajor}.*\` release to start the \`${lmajor}.x\` line from: nothing done."; exit 0; }
+  package_changed "$work/m" "$latest" "origin/main" \
+    && { reply "@${user}: main of ${module} has unreleased changes since \`${latest}\`: release them (\`/release v${lmajor}.<next>\`) first, nothing done."; exit 0; }
+
+  mr=$(api GET "/repos/${module}/pulls?state=all&limit=50" | jq -r --arg h "up/${project}/${head_ref//\//-}" '[.[]|select(.head.ref==$h)]|sort_by(.number)|last|.number // empty')
+  [ -n "$mr" ] || { reply "@${user}: no merge request from the Upstream job exists for this pull request: nothing done."; exit 0; }
+  m=$(api GET "/repos/${module}/pulls/${mr}")
+  [ "$(jq -r .merged <<<"$m")" = false ] || { reply "@${user}: ${module}#${mr} is already merged, and its change is unreleased: nothing done."; exit 0; }
+  [ "$(jq -r .state <<<"$m")" = open ] || { reply "@${user}: ${module}#${mr} is closed: nothing done."; exit 0; }
+  [ "$(jq -r .base.ref <<<"$m")" = main ] || { reply "@${user}: ${module}#${mr} targets \`$(jq -r .base.ref <<<"$m")\`, not \`main\`: nothing done."; exit 0; }
+  st=$(api GET "/repos/${module}/commits/$(jq -r .head.sha <<<"$m")/status" | jq -r '.state // "pending"')
+  [ "$st" = success ] || { reply "@${user}: the Checks of ${module}#${mr} are \`${st}\`, not green: $([ "$st" = pending ] && echo "reply \`/release_major\` again when they pass" || echo "fix them first"); nothing done."; exit 0; }
+
+  # 1. the old line, from the commit of main's last release of the locked major (an existing line at that commit is fine)
+  lsha=$(git -C "$work/m" rev-list -n1 "$latest")
+  if oldsha=$(git -C "$work/m" ls-remote origin "refs/heads/${lmajor}.x" | cut -f1) && [ -n "$oldsha" ]; then
+    [ "$oldsha" = "$lsha" ] || { reply "@${user}: \`${lmajor}.x\` of ${module} exists at another commit: nothing done."; exit 0; }
+  else
+    api POST "/repos/${module}/branches" "$(jq -n --arg n "${lmajor}.x" --arg o "$lsha" '{new_branch_name:$n,old_ref_name:$o}')" >/dev/null \
+      || { reply "@${user}: Gitea refused to create \`${lmajor}.x\` in ${module}: nothing done."; exit 0; }
+  fi
+  # 2. the merge request into main
+  api POST "/repos/${module}/pulls/${mr}/merge" '{"Do":"merge","delete_branch_after_merge":true}' >/dev/null \
+    || { reply "@${user}: \`${lmajor}.x\` is created at \`${latest}\`, but Gitea refused to merge ${module}#${mr} (conflict, or a branch rule): merge it there, then reply \`/release_major\` again."; exit 0; }
+  sha=""; for _ in 1 2 3 4 5; do sha=$(api GET "/repos/${module}/pulls/${mr}" | jq -r '.merge_commit_sha // empty'); [ -n "$sha" ] && break; sleep 2; done
+  # 3. the new major on main
+  if api POST "/repos/${module}/tags" "$(jq -n --arg t "$version" --arg c "$sha" --arg m "${version#v} (new major, released from ${REPOSITORY}#${PR} by ${user})" '{tag_name:$t,target:$c,message:$m}')" >/dev/null; then
+    reply "New major \`${version}\` released from main of ${module} (requested by @${user}). The \`${lmajor}.x\` line starts at \`${latest}\`, where ${lmajor}.x fixes go; main carries \`${version}\`. The Release job publishes it. Projects stay on \`${lmajor}.x\` until a project moves to \`^${major}.0\`."
+  else
+    reply "@${user}: \`${lmajor}.x\` and the merge into main are done, but Gitea refused the tag \`${version}\` (the bot may not be on the protected-tag list of ${module}). Tag it yourself: \`git fetch origin && git tag -a ${version} -m \"${version#v}\" ${sha:0:12} && git push origin ${version}\`"
   fi
   exit 0
 fi
