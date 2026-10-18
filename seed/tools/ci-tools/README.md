@@ -125,6 +125,10 @@ rejected, so the Release job adds the release to that pull request instead of op
 but no committed `vendor/composer/installed.json` is a warning on feature branches and a failure on pull requests into
 `main` and on `main`: the drift check cannot compare the module folders without `vendor/`.
 
+**v1.9.4:** `/release_major` and `/merge` find the module merge request by the `upstream-source` marker in its body, not
+by its head branch: Gitea deletes the `up/...` branch when a merge request is merged, so a merged one could not be found
+(the reply was "no merge request from the Upstream job exists").
+
 **v1.9.3:** the main devs choose the release. The Upstream job's merge request carries the `Module-Major: N` trailer of
 the project's commits, so the module history says which major a change is. After the merge request is merged (`/merge`),
 the release reminder offers both: a minor release (`/release <module> vX.(Y+1).0`) and a new major

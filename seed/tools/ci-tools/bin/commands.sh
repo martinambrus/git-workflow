@@ -124,8 +124,9 @@ is_main_dev "$user" "$org" || { reply "@${user}: only main devs (members of the 
 
 if [ "$cmd" = /merge ]; then
   m=$(api GET "/repos/${module}/pulls/${mr}") || { reply "@${user}: ${module}#${mr} does not exist: nothing done."; exit 0; }
-  want="up/${project}/${head_ref//\//-}"
-  [ "$(jq -r .head.ref <<<"$m")" = "$want" ] || { reply "@${user}: ${module}#${mr} was not opened for this pull request (expected branch \`${want}\`): nothing done."; exit 0; }
+  # the merge request names its project branch in its body (the head branch is deleted after a merge)
+  marker="<!-- upstream-source: ${REPOSITORY} ${head_ref} -->"
+  jq -e --arg m "$marker" '.body|contains($m)' <<<"$m" >/dev/null || { reply "@${user}: ${module}#${mr} was not opened for this pull request: nothing done."; exit 0; }
   [ "$(jq -r .merged <<<"$m")" = false ] || { reply "@${user}: ${module}#${mr} is already merged."; exit 0; }
   [ "$(jq -r .state <<<"$m")" = open ] || { reply "@${user}: ${module}#${mr} is closed: nothing done."; exit 0; }
   st=$(api GET "/repos/${module}/commits/$(jq -r .head.sha <<<"$m")/status" | jq -r '.state // "pending"')
@@ -176,7 +177,8 @@ if [ "$cmd" = /release_major ]; then
   latest=$(latest_tag "$work/m" "origin/main")
   [ -n "$latest" ] && [ "${latest#v${lmajor}.}" != "$latest" ] \
     || { reply "@${user}: main of ${module} has no \`v${lmajor}.*\` release to start the \`${lmajor}.x\` line from: nothing done."; exit 0; }
-  mr=$(api GET "/repos/${module}/pulls?state=all&limit=50" | jq -r --arg h "up/${project}/${head_ref//\//-}" '[.[]|select(.head.ref==$h)]|sort_by(.number)|last|.number // empty')
+  # the newest merge request from this project branch: found by its body, since a merged one has lost its head branch
+  mr=$(api GET "/repos/${module}/pulls?state=all&limit=50" | jq -r --arg m "<!-- upstream-source: ${REPOSITORY} ${head_ref} -->" '[.[]|select(.body|contains($m))]|sort_by(.number)|last|.number // empty')
   [ -n "$mr" ] || { reply "@${user}: no merge request from the Upstream job exists for this pull request: nothing done."; exit 0; }
   m=$(api GET "/repos/${module}/pulls/${mr}")
   merged=$(jq -r .merged <<<"$m")
