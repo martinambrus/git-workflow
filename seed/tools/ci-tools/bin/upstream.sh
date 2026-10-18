@@ -114,7 +114,9 @@ for entry in "${mods[@]}"; do
     msg=$(git log --format='- %s (%an)' "$base_ref"..HEAD -- "$path" || true)
     git -C "$mod" switch -q -c "$bot_branch" "refs/tags/$version"   # cut from the LOCKED release, never from a moved main/1.x
     git -C "$mod" apply --index "$work/changes.patch"
-    bot_git -C "$mod" commit -q -m "Changes from project ${project} (${BRANCH})" -m "$msg"
+    # a new major keeps its Module-Major trailer, so the module's own history says which major the change is
+    trailer=(); [ -n "$want" ] && trailer=(-m "Module-Major: ${want}")
+    bot_git -C "$mod" commit -q -m "Changes from project ${project} (${BRANCH})" -m "$msg" "${trailer[@]}"
 
     # integrity: the module branch must reproduce the project folder exactly (checked BEFORE pushing)
     chk="$work/chk"; mkdir "$chk"; git -C "$mod" archive HEAD | tar -x -C "$chk"
@@ -162,11 +164,11 @@ for entry in "${mods[@]}"; do
         ask="**Main devs:** review the change in ${mr_url}, then reply here with
 \`/merge ${name}#${mr}\`"
       else
-        nv=$(next_version "$mod" "origin/${target}")
+        read -r minor major < <(release_versions "$mod" "origin/${target}")
         status="Already merged into \`${target}\` of \`${name}\`, not released yet."
-        ask="**Main devs:** reply here with
-\`/release ${name} ${nv}\`
-(or tag \`${nv}\` on \`${target}\` yourself)"
+        ask="**Main devs:** choose the release and reply here with one of:
+- a minor release: \`/release ${name} ${minor}\`
+- a new major: \`/release_major ${name} ${major}\`"
       fi
       note=$(cat <<NOTE
 ${marker}

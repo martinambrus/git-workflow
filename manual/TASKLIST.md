@@ -196,13 +196,13 @@ containing `dev` and `bot`; you hold a `BOT_TOKEN`.
   git push origin --tags
   ```
   ✅ the repo shows `bin/upstream.sh`, `bin/release.sh`, `bin/update-prs.sh`, `bin/check-project.sh`,
-  `bin/check-module.sh`, `bin/forward-port.sh`, `bin/release-reminder.sh`, `bin/commands.sh`, and twenty-one tags
-  (`v1.0.0` to `v1.9.2`). 📸
-  *Why so many tags:* a tag is never moved, and the workflow stubs pin **`v1.9.2`** everywhere (module checks, project
+  `bin/check-module.sh`, `bin/forward-port.sh`, `bin/release-reminder.sh`, `bin/commands.sh`, and twenty-two tags
+  (`v1.0.0` to `v1.9.3`). 📸
+  *Why so many tags:* a tag is never moved, and the workflow stubs pin **`v1.9.3`** everywhere (module checks, project
   checks, upstream, commands, release, release reminder, forward-port). The older tags are history: each one is what a
   stub pinned at the time. The newest, `v1.9.1` (the `/release_major` command of task 9.1b), is added the same way. In your own setup you would publish real versions.
 
-**Done when:** `git ls-remote --tags http://gitea.test:3000/activit/ci-tools.git` lists the twenty-one tags.
+**Done when:** `git ls-remote --tags http://gitea.test:3000/activit/ci-tools.git` lists the twenty-two tags.
 
 ---
 
@@ -470,9 +470,10 @@ and implements the new hook; only **shop-b** gets it.
   rule for it: try a direct push as `dev`: refused).
 - [ ] **9.1b Alternative to 9.1 and 9.2: `/release_major` does both in one reply** (ci-tools `v1.9.1` and later). Use it for the major itself, from a project that is still locked to 1.x:
   1. Make the breaking change in shop-a's copy of the module, as in 12.1 (the rename, or any change that needs 2.0). Commit
-     it with a trailer line of its own: `Module-Major: 2`. Push the branch and open the PR into `main`.
-     ✅ Upstream opens the module MR **into `main`**, although shop-a is locked to 1.x. The trailer names the new major;
-     without it the MR goes to `1.x`, as in 12.2.
+     it with a trailer line of its own: `Module-Major: 2` (optional: the version in step 2 decides, but the trailer keeps
+     the history honest). Push the branch and open the PR into `main`.
+     ✅ Upstream opens the module MR **into `main`**, although shop-a is locked to 1.x, because `1.x` does not exist yet. With
+     the trailer the MR is aimed at the new major's line; without it, at the locked line when that exists, as in 12.2.
   2. Checks green on the module MR and on the project PR. Then, as the main dev, reply in the project PR:
      `/release_major activit/ait_banners v2.0.0`
   3. ✅ The bot creates `1.x` at `v1.1.0`, merges the module MR into `main` and tags `v2.0.0` on the merge commit. Its reply
@@ -480,8 +481,8 @@ and implements the new hook; only **shop-b** gets it.
   4. ✅ A second `/release_major` for the same version is refused ("already exists … nothing done").
   The reply is refused, with the reason, unless all of these hold: the project is locked to the major before the new one;
   the version is `vN.0.0`, with N one above the lock; no `N.x` branch and no `vN.*` tag exist; `main` has no unreleased
-  package change since its last release; the module MR is open, into `main`, with green Checks. ⚠ An MR that was already
-  merged into `main` is refused: release that change by hand (9.2) in that case.
+  package change since its last release; the module MR goes into `main`, and is either open with green Checks or already
+  merged (after `/merge`) with nothing unreleased before or after it on `main`.
   Then continue with 9.3 and 9.4 as written.
 
 - [ ] **9.2 Tag 2.0.0:**
@@ -738,7 +739,7 @@ The workflow stubs in `seed/` contain these literally. Use them, or edit the stu
 | Users | `admin` (main dev: tags, release lines), `dev`, `bot` (automation: tags `v*` for `/release`, creates and pushes `N.x` lines for `/release_major`) |
 | Org secrets (both orgs) | `BOT_TOKEN`, `PACKETON_TOKEN` |
 | Runner label | `activit-runner` |
-| ci-tools tags | `v1.9.2` everywhere (module and project workflows), including `/release_major` (9.1b) |
+| ci-tools tags | `v1.9.3` everywhere (module and project workflows), including `/release_major` (9.1b) |
 | Status check required on `main` and `[0-9]*.x` | `checks / checks (pull_request)` |
 | Opt-in topic for update PRs | `activit-project` |
 | Default branch | `main` |
@@ -787,7 +788,7 @@ For every project repo (`shop-a`, `shop-b`):
 | `/release_major` refused: "`N.x` already exists" or a `vN.*` tag exists | the major is already released: use `/release` on its line |
 | `/release_major`: "Gitea refused to create `N-1.x`" | the bot is missing from the `[0-9]*.x` push allowlist (5.5, Appendix B) |
 | Upstream opened the MR into `1.x` for a breaking change | the commit has no `Module-Major: N` trailer (9.1b); add it and push again |
-| `/release_major` refused: "no commit … says `Module-Major`" | the trailer is missing or misspelled: it must be its own line, exactly `Module-Major: 2` |
+| `/release_major` refused: "a commit of this pull request says another `Module-Major`" | a commit names a different major than the version: fix the trailer (its own line, exactly `Module-Major: N`) or the version |
 | You want to start over | `./lab bare destroy` then `./lab bare up` |
 
 ## Appendix E — screenshot list

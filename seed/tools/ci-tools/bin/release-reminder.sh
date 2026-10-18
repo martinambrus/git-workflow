@@ -1,7 +1,8 @@
 #!/bin/bash
 # Release reminder, runs in a module repository when a pull request is closed. For a MERGED merge request from the
 # Upstream job (branch up/<project>/<branch>): the change is on the release line but not released, and a project is
-# waiting for it. Comment on the merge request with the next version and how to tag it, and tell the project's pull
+# waiting for it. Comment on the merge request with the next minor and the next major (the main devs choose) and how
+# to tag, and tell the project's pull
 # request that its change was merged and waits for that release. For a merged forward-port (fwd/...): update the
 # overview in the project pull request the change came from, and ask for /release if the merge was not tagged.
 # Idempotent (a marker in each comment).
@@ -61,12 +62,10 @@ msha=$(api GET "/repos/${REPOSITORY}/pulls/${PR}" | jq -r '.merge_commit_sha // 
 if [ -n "$msha" ] && ! package_changed "$work/m" "${msha}^1" "$msha"; then
   log "#$PR changes nothing in the package (CI-only): no release reminder"; exit 0; fi
 latest=$(latest_tag "$work/m" "origin/${BASE_REF}")
-if [[ $latest =~ ^v([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
-  next="v${BASH_REMATCH[1]}.${BASH_REMATCH[2]}.$((BASH_REMATCH[3] + 1))"
-  since="latest release on this line: \`${latest}\`"
-else
-  next="v1.0.0"; since="no release on this line yet"
-fi
+read -r minor major < <(release_versions "$work/m" "origin/${BASE_REF}")
+lmajor=""
+if [[ $latest =~ ^v([0-9]+)\. ]]; then lmajor=${BASH_REMATCH[1]}; fi
+if [ -n "$latest" ]; then since="latest release on this line: \`${latest}\`"; else since="no release on this line yet"; fi
 
 # the project that sent it: marker in the merge request body (ci-tools >= v1.5.0), else the readable first line
 body=$(api GET "/repos/${REPOSITORY}/pulls/${PR}" | jq -r '.body // ""')
@@ -78,6 +77,8 @@ src_pr=""
 if [ -n "${src_repo:-}" ]; then
   src_pr=$(api GET "/repos/${src_repo}/pulls?state=open&limit=50" | jq -r --arg h "$src_branch" '.[]|select(.head.ref==$h)|.number' | head -1 || true)
 fi
+major_where="the project's pull request"
+[ -n "${src_pr:-}" ] && major_where="${GITEA_URL}/${src_repo}/pulls/${src_pr}"
 waiting="A project is waiting for it."
 [ -n "${src_repo:-}" ] && waiting="\`${src_repo}\` is waiting for it${src_pr:+ (${GITEA_URL}/${src_repo}/pulls/${src_pr})}."
 
@@ -85,15 +86,17 @@ msg=$(cat <<MSG
 ${marker}
 Merged into \`${BASE_REF}\`, **not released yet** (${since}). ${waiting}
 
-To ship it, a main dev tags **\`${next}\`** on \`${BASE_REF}\` (a minor version instead if the change adds a feature):
-- command line: \`git fetch origin && git switch ${BASE_REF} && git pull && git tag -a ${next} -m "${next#v}" && git push origin ${next}\`
-- web UI: *Code* → branch dropdown → **\`${BASE_REF}\`** → open it again → *Tags* → type \`${next}\` → *Create tag ${next}* (check the branch first: the tag is cut from the branch you are on)
+**Main devs:** choose the release and reply with one of:
+- a minor release on \`${BASE_REF}\`: reply here with \`/release ${minor}\`
+- a new major: reply in ${major_where} with \`/release_major ${REPOSITORY} ${major}\` (the \`${lmajor:-?}.x\` line starts at \`${latest:-none}\`, and the change is merged into \`${BASE_REF}\` and tagged \`${major}\`)
 
-Or reply \`/release ${REPOSITORY} ${next}\` in the project's pull request and the bot tags it. The Release job then adds the release to that pull request (one bot commit), which can then be merged; other projects get update pull requests.
+Or tag one of them yourself on \`${BASE_REF}\` (check the branch first: the tag is cut from the branch you are on): \`git fetch origin && git switch ${BASE_REF} && git pull && git tag -a ${minor} -m "${minor#v}" && git push origin ${minor}\`.
+
+The Release job then adds the release to the project's pull request (one bot commit), which can then be merged; other projects get update pull requests.
 MSG
 )
 api POST "/repos/${REPOSITORY}/issues/${PR}/comments" "$(jq -n --arg b "$msg" '{body:$b}')" >/dev/null
-log "#$PR: reminder posted (next ${next} on ${BASE_REF})"
+log "#$PR: reminder posted (minor ${minor}, major ${major} on ${BASE_REF})"
 
 if [ -n "$src_pr" ]; then
   pmarker="<!-- upstream-merged:${REPOSITORY}#${PR} -->"
@@ -101,9 +104,10 @@ if [ -n "$src_pr" ]; then
     pmsg="${pmarker}
 Module change merged: ${GITEA_URL}/${REPOSITORY}/pulls/${PR} (into \`${BASE_REF}\`), not released yet.
 
-**Main devs:** reply here with
-\`/release ${REPOSITORY} ${next}\`
-(or tag \`${next}\` on \`${BASE_REF}\` yourself: see ${GITEA_URL}/${REPOSITORY}/pulls/${PR})"
+**Main devs:** choose the release and reply here with one of:
+- a minor release: \`/release ${REPOSITORY} ${minor}\`
+- a new major: \`/release_major ${REPOSITORY} ${major}\`
+(or tag one of them yourself: see ${GITEA_URL}/${REPOSITORY}/pulls/${PR})"
     api POST "/repos/${src_repo}/issues/${src_pr}/comments" "$(jq -n --arg b "$pmsg" '{body:$b}')" >/dev/null \
       && log "${src_repo}#${src_pr}: told the project pull request" || warn "could not comment on ${src_repo}#${src_pr}"
   fi

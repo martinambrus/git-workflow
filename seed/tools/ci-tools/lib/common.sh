@@ -68,6 +68,14 @@ package_changed() {
 }
 
 # next_version GIT_DIR REF -> the next patch version after latest_tag (v1.0.0 if none)
+# release_versions GIT_DIR BASE_REF -> prints "MINOR MAJOR": the next minor and the next major after BASE_REF's latest
+# release (both are offered to the main devs, who choose; a new major is released from a project pull request)
+release_versions() {
+  local latest; latest=$(latest_tag "$1" "$2")
+  if [[ $latest =~ ^v([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then echo "v${BASH_REMATCH[1]}.$((BASH_REMATCH[2] + 1)).0 v$((BASH_REMATCH[1] + 1)).0.0"
+  else echo "v1.0.0 v1.0.0"; fi
+}
+
 next_version() {
   local latest; latest=$(latest_tag "$1" "$2")
   if [[ $latest =~ ^v([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then echo "v${BASH_REMATCH[1]}.${BASH_REMATCH[2]}.$((BASH_REMATCH[3] + 1))"

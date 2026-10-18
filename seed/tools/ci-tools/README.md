@@ -125,6 +125,14 @@ rejected, so the Release job adds the release to that pull request instead of op
 but no committed `vendor/composer/installed.json` is a warning on feature branches and a failure on pull requests into
 `main` and on `main`: the drift check cannot compare the module folders without `vendor/`.
 
+**v1.9.3:** the main devs choose the release. The Upstream job's merge request carries the `Module-Major: N` trailer of
+the project's commits, so the module history says which major a change is. After the merge request is merged (`/merge`),
+the release reminder offers both: a minor release (`/release <module> vX.(Y+1).0`) and a new major
+(`/release_major <org>/<module> v(N+1).0.0` in the project pull request). The Upstream comment on an already merged change
+does the same. `/release_major` no longer needs the trailer: the version decides, and a commit that names another major is
+refused. It also accepts a merge request that is already merged, when nothing unreleased sat on `main` before the merge
+and nothing landed after it. The line-exists and tag checks are unchanged.
+
 **v1.9.1:** a new major can be sent from a project still locked to the old one. `bin/upstream.sh` reads a
 `Module-Major: N` line in the project's commit messages for the module (N above the locked major) and targets `<N>.x`
 if it exists, else `main`. Without the line it targets the locked major's line as before. Before, a breaking change
