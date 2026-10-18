@@ -196,14 +196,13 @@ containing `dev` and `bot`; you hold a `BOT_TOKEN`.
   git push origin --tags
   ```
   ✅ the repo shows `bin/upstream.sh`, `bin/release.sh`, `bin/update-prs.sh`, `bin/check-project.sh`,
-  `bin/check-module.sh`, `bin/forward-port.sh`, `bin/release-reminder.sh`, `bin/commands.sh`, and nineteen tags
-  (`v1.0.0` to `v1.8.9`). 📸
-  *Why so many tags:* a tag is never moved, and the workflow stubs pin **`v1.8.9`** everywhere (module checks, project
+  `bin/check-module.sh`, `bin/forward-port.sh`, `bin/release-reminder.sh`, `bin/commands.sh`, and twenty tags
+  (`v1.0.0` to `v1.9.1`). 📸
+  *Why so many tags:* a tag is never moved, and the workflow stubs pin **`v1.9.1`** everywhere (module checks, project
   checks, upstream, commands, release, release reminder, forward-port). The older tags are history: each one is what a
-  stub pinned at the time. A later version (`v1.9.1`, the `/release_major` command of task 9.1b) is added the same way
-  when it is released. In your own setup you would publish real versions.
+  stub pinned at the time. The newest, `v1.9.1` (the `/release_major` command of task 9.1b), is added the same way. In your own setup you would publish real versions.
 
-**Done when:** `git ls-remote --tags http://gitea.test:3000/activit/ci-tools.git` lists the nineteen tags.
+**Done when:** `git ls-remote --tags http://gitea.test:3000/activit/ci-tools.git` lists the twenty tags.
 
 ---
 
@@ -469,8 +468,7 @@ and implements the new hook; only **shop-b** gets it.
   ```
   PR → Checks → merge. 📸 `1.x` in the branch list (it is protected by the glob rule without anyone creating a
   rule for it: try a direct push as `dev`: refused).
-- [ ] **9.1b Alternative to 9.1 and 9.2: `/release_major` does both in one reply** (ci-tools `v1.9.1` and later, once it
-  is released). Use it for the major itself, from a project that is still locked to 1.x:
+- [ ] **9.1b Alternative to 9.1 and 9.2: `/release_major` does both in one reply** (ci-tools `v1.9.1` and later). Use it for the major itself, from a project that is still locked to 1.x:
   1. Make the breaking change in shop-a's copy of the module, as in 12.1 (the rename, or any change that needs 2.0). Commit
      it with a trailer line of its own: `Module-Major: 2`. Push the branch and open the PR into `main`.
      ✅ Upstream opens the module MR **into `main`**, although shop-a is locked to 1.x. The trailer names the new major;
@@ -740,7 +738,7 @@ The workflow stubs in `seed/` contain these literally. Use them, or edit the stu
 | Users | `admin` (main dev: tags, release lines), `dev`, `bot` (automation: tags `v*` for `/release`, creates and pushes `N.x` lines for `/release_major`) |
 | Org secrets (both orgs) | `BOT_TOKEN`, `PACKETON_TOKEN` |
 | Runner label | `activit-runner` |
-| ci-tools tags | `v1.8.9` everywhere (module and project workflows); `v1.9.1` once it is released (`/release_major`, 9.1b) |
+| ci-tools tags | `v1.9.1` everywhere (module and project workflows), including `/release_major` (9.1b) |
 | Status check required on `main` and `[0-9]*.x` | `checks / checks (pull_request)` |
 | Opt-in topic for update PRs | `activit-project` |
 | Default branch | `main` |

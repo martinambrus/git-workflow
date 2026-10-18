@@ -14,7 +14,7 @@ jobs:
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
         run: |
           set -euo pipefail
-          git clone -q --depth 1 --branch v1.8.9 \
+          git clone -q --depth 1 --branch v1.9.1 \
             "http://bot:${BOT_TOKEN}@gitea.test:3000/activit/ci-tools.git" /tmp/ci-tools
           export GITEA_URL="${{ github.server_url }}" REPOSITORY="${{ github.repository }}" \
                  BRANCH="${{ github.head_ref }}"
