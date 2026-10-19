@@ -121,6 +121,21 @@ else
 fi
 echo "::endgroup::"
 
+# --- 5. every locked activit/* version is visible to this project's own Packeton user ------------------------------
+# A frozen project (version limit or update-expiration date in Packeton) cannot list newer versions, but the lock's
+# dist URL still downloads them, so a pull request that moves the lock would pass the other checks. Fail it here.
+echo "::group::5 Packeton visibility (${PACKETON_USER})"
+if [ -f composer.lock ]; then
+  nv=0
+  while IFS=$'\t' read -r name ver; do
+    seen=$(curl -fsS -u "${PACKETON_USER}:${PACKETON_TOKEN}" "${PACKETON_URL}/p2/${name}.json" 2>/dev/null \
+      | jq -r --arg n "$name" '.packages[$n][]?.version' | grep -cxF "$ver")
+    [ "${seen:-0}" -gt 0 ] || { soft "$name $ver is locked but not listed for Packeton user ${PACKETON_USER} (frozen or outside its version limit)"; nv=1; }
+  done < <(jq -r '.packages[]|select(.name|startswith("activit/"))|select(.version|test("^dev-|-dev$")|not)|"\(.name)\t\(.version)"' composer.lock)
+  [ $nv = 0 ] && log "ok"
+fi
+echo "::endgroup::"
+
 echo
 if [ $fails -gt 0 ]; then log "RESULT: $fails check(s) failed, $warns warning(s)"; exit 1; fi
 log "RESULT: passed${warns:+ with $warns warning(s)}"

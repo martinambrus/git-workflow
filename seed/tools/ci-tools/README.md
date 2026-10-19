@@ -125,6 +125,11 @@ rejected, so the Release job adds the release to that pull request instead of op
 but no committed `vendor/composer/installed.json` is a warning on feature branches and a failure on pull requests into
 `main` and on `main`: the drift check cannot compare the module folders without `vendor/`.
 
+**v1.9.8:** `bin/check-project.sh` check 5: every locked `activit/*` version must be listed for the project's own Packeton
+user (`PACKETON_USER`). A frozen project (version limit or update-expiration date) cannot list newer versions, but the
+dist URL in the lock still downloads them, so an update pull request that moved the lock passed every other check. It
+now fails on pull requests into `main` and on `main`, and warns on feature branches.
+
 **v1.9.7:** `bin/check-project.sh` takes the Packeton user from `PACKETON_USER` (default `admin`). Each project has its own
 Packeton user and token (plan 10): Packeton rejects a token sent under another user's name, so the drift check's
 `COMPOSER_AUTH` names the project's user.
