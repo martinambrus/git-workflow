@@ -90,6 +90,10 @@ inplace() { local repo=$1 path=$2 n head comments pdiff b out a sha i m cands=()
     [ -n "$n" ] || continue
     comments=$(api GET "/repos/${repo}/issues/${n}/comments?limit=100") || continue
     jq -e --arg m "$marker" '.[]|select(.body|contains($m))' <<<"$comments" >/dev/null || continue
+    # a pull request whose lock already has the release is done (or was updated earlier): it is not a candidate
+    lockv=$(api GET "/repos/${repo}/contents/composer.lock?ref=${head}" | jq -r '.content // empty' | base64 -d 2>/dev/null \
+      | jq -r --arg p "$package" '.packages[]|select(.name==$p)|.version' 2>/dev/null | head -1 || true)
+    [ "$(release_version "$lockv")" = "$ver" ] && continue
     cands+=("$n $head")
     pdiff=$(mktemp)
     if api GET "/repos/${repo}/pulls/${n}.diff" > "$pdiff" && without_gitea "$pdiff" | module_part "$path" | (cd "$RELEASE_TREE" && git apply -R --check -p"$(strip_for "$path")" -) 2>/dev/null; then
@@ -193,12 +197,16 @@ for repo in "${repos[@]}"; do
     warn "Packeton answered with an authentication error in $repo: refusing to trust the result"; rc=1; echo "::endgroup::"; continue
   fi
   after=$(jq -r --arg p "$package" '.packages[]|select(.name==$p)|.version' composer.lock | head -1)
+  path=$(install_path "$package")
   if [ "$(release_version "$after")" != "$ver" ]; then
-    log "$repo stays on $after (its constraint '$(jq -r --arg p "$package" '.require[$p]' composer.json)' does not allow $ver): no pull request"
+    # main's constraint does not allow the release, but an open project pull request may: the one that carries the
+    # module change upstream and whose own constraint allows it gets the release on its branch (inplace checks that)
+    if ! inplace "$repo" "$path"; then
+      log "$repo stays on $after (its constraint '$(jq -r --arg p "$package" '.require[$p]' composer.json)' does not allow $ver): no pull request"
+    fi
     echo "::endgroup::"; continue
   fi
 
-  path=$(install_path "$package")
   if inplace "$repo" "$path"; then echo "::endgroup::"; continue; fi
   stat=$(git diff --stat HEAD -- "$path" | tail -20 || true)
   git switch -q -c "$branch"

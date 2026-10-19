@@ -125,6 +125,12 @@ rejected, so the Release job adds the release to that pull request instead of op
 but no committed `vendor/composer/installed.json` is a warning on feature branches and a failure on pull requests into
 `main` and on `main`: the drift check cannot compare the module folders without `vendor/`.
 
+**v1.9.10:** `bin/update-prs.sh` (Release job) also gives the release to an open project pull request whose own
+constraint allows it, when the project's default branch does not (the constraint on `main` is older than the release,
+for example a project that was pinned back to 1.x on its pull request). Only pull requests that carry the Upstream
+marker and whose lock is still behind count; the release must be contained in the pull request's module change, as
+before. Before, such a pull request was never touched and stayed red until someone ran `composer update` by hand.
+
 **v1.9.9:** check 5 closes the pull request when it is the only failure: on a pull request into `main`, when the locked
 version is not listed for the project's Packeton user (after three looks, 20 seconds apart, in case the release is not
 indexed yet). The check comments with the reason and closes the pull request; the branch is kept, so it can be reopened
