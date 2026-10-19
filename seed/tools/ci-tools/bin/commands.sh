@@ -44,7 +44,7 @@ if [[ $(jq -r '.body // ""' <<<"$pr") =~ \<\!--\ forward-port:([^:]+):[0-9a-f]{4
   state=$(jq -r .state <<<"$pr"); merged=$(jq -r .merged <<<"$pr")
   case $cmd in
     /merge)   [ -z "${arg1:-}" ] || usage ;;
-    /release) [[ ${arg1:-} =~ ^v([0-9]+)\.[0-9]+\.[0-9]+$ ]] && [ -z "${arg2:-}" ] || usage; version=$arg1; major=${BASH_REMATCH[1]} ;;
+    /release) reply "@${user}: a forward-port is not released by itself: its change already shipped on the older line. Merge it with \`/merge\`, and tag \`${base}\` yourself when that line needs a release (the Release job runs on the tag): nothing done."; exit 0 ;;
     *) usage ;;
   esac
   [ "$merged" = true ] || [ "$state" = open ] || { reply "@${user}: this pull request was closed without merging: nothing done."; exit 0; }

@@ -125,6 +125,10 @@ rejected, so the Release job adds the release to that pull request instead of op
 but no committed `vendor/composer/installed.json` is a warning on feature branches and a failure on pull requests into
 `main` and on `main`: the drift check cannot compare the module folders without `vendor/`.
 
+**v1.9.11:** a forward-port is merged, never released by itself: its change already shipped on the older line. The
+forward-port prompt asks for `/merge`; `/release` on a forward-port pull request is refused (tag the line yourself when
+it needs a release); a merged forward-port gets no release prompt from the reminder.
+
 **v1.9.10:** `bin/update-prs.sh` (Release job) also gives the release to an open project pull request whose own
 constraint allows it, when the project's default branch does not (the constraint on `main` is older than the release,
 for example a project that was pinned back to 1.x on its pull request). Only pull requests that carry the Upstream

@@ -197,13 +197,13 @@ containing `dev` and `bot`; you hold a `BOT_TOKEN`.
   git push origin --tags
   ```
   ✅ the repo shows `bin/upstream.sh`, `bin/release.sh`, `bin/update-prs.sh`, `bin/check-project.sh`,
-  `bin/check-module.sh`, `bin/forward-port.sh`, `bin/release-reminder.sh`, `bin/commands.sh`, and twenty-nine tags
-  (`v1.0.0` to `v1.9.10`). 📸
-  *Why so many tags:* a tag is never moved, and the workflow stubs pin **`v1.9.10`** everywhere (module checks, project
+  `bin/check-module.sh`, `bin/forward-port.sh`, `bin/release-reminder.sh`, `bin/commands.sh`, and thirty tags
+  (`v1.0.0` to `v1.9.11`). 📸
+  *Why so many tags:* a tag is never moved, and the workflow stubs pin **`v1.9.11`** everywhere (module checks, project
   checks, upstream, commands, release, release reminder, forward-port). The older tags are history: each one is what a
   stub pinned at the time. The newest, `v1.9.1` (the `/release_major` command of task 9.1b), is added the same way. In your own setup you would publish real versions.
 
-**Done when:** `git ls-remote --tags http://gitea.test:3000/activit/ci-tools.git` lists the twenty-nine tags.
+**Done when:** `git ls-remote --tags http://gitea.test:3000/activit/ci-tools.git` lists the thirty tags.
 
 ---
 
@@ -756,7 +756,7 @@ The workflow stubs in `seed/` contain these literally. Use them, or edit the stu
 | Users | `admin` (main dev: tags, release lines), `dev`, `bot` (automation: tags `v*` for `/release`, creates and pushes `N.x` lines for `/release_major`) |
 | Org secrets (both orgs) | `BOT_TOKEN`, `PACKETON_TOKEN` (admin token). Project repos: repo secret `PACKETON_TOKEN` of their own Packeton user (6.2b) |
 | Runner label | `activit-runner` |
-| ci-tools tags | `v1.9.10` everywhere (module and project workflows), including `/release_major` (9.1b) |
+| ci-tools tags | `v1.9.11` everywhere (module and project workflows), including `/release_major` (9.1b) |
 | Status check required on `main` and `[0-9]*.x` | `checks / checks (pull_request)` |
 | Opt-in topic for update PRs | `activit-project` |
 | Default branch | `main` |

@@ -36,17 +36,9 @@ case $HEAD_REF in
            overview "$origin" "${REPOSITORY}#${PR}" "$(fwd_line "$REPOSITORY" "$PR" "$from" "$BASE_REF" "merged, **released as \`${tag}\`**")"
            log "#$PR: merged and released as $tag"
          else
-           nv=$(next_version "$work/m" "origin/${BASE_REF}")
-           marker="<!-- release-reminder -->"
-           if ! api GET "/repos/${REPOSITORY}/issues/${PR}/comments?limit=100" | jq -e --arg m "$marker" '.[]|select(.body|contains($m))' >/dev/null; then
-             msg="${marker}
-Merged into \`${BASE_REF}\`, **not released yet**. **Main devs:** reply here with
-\`/release ${nv}\`
-to tag \`${BASE_REF}\` and release it (projects on this line then get their update pull requests)."
-             api POST "/repos/${REPOSITORY}/issues/${PR}/comments" "$(jq -n --arg b "$msg" '{body:$b}')" >/dev/null || true
-           fi
-           overview "$origin" "${REPOSITORY}#${PR}" "$(fwd_line "$REPOSITORY" "$PR" "$from" "$BASE_REF" "merged, not released yet; main devs reply \`/release ${nv}\` there")"
-           log "#$PR: merged, not released (asked for $nv)"
+           # a forward-port is not released by itself (its change already shipped on the older line): no release prompt
+           overview "$origin" "${REPOSITORY}#${PR}" "$(fwd_line "$REPOSITORY" "$PR" "$from" "$BASE_REF" "merged; not released by this pull request (tag \`${BASE_REF}\` when it needs a release)")"
+           log "#$PR: merged, not released by the forward-port (no release prompt)"
          fi
          exit 0 ;;
   *)     log "#$PR is not from the Upstream or Forward-port job ($HEAD_REF): nothing to do"; exit 0 ;;

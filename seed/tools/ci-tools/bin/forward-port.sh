@@ -88,9 +88,9 @@ This forward-port only changes files that are **not part of the package** (CI wo
   fi
   prompt="<!-- fwd-prompt -->
 **Main devs:** once the Checks are green, reply here with
-\`/release ${nv}\`
-to merge this into \`${target}\` and release it right away (the bot tags the merge commit; the release contains everything unreleased on \`${target}\`, the reply lists it), or with \`/merge\` to merge only. Merging it does not release anything by itself."
+\`/merge\`
+to merge this into \`${target}\`. A forward-port is not released by itself: its change already shipped on the older line. Tag \`${target}\` yourself when it needs a release."
   api POST "/repos/$REPOSITORY/issues/${num}/comments" "$(jq -n --arg b "$prompt" '{body:$b}')" >/dev/null || warn "#$num: prompt comment failed"
-  overview "$(origin_of "$REPOSITORY" "$c")" "${REPOSITORY}#${num}" "$(fwd_line "$REPOSITORY" "$num" "$BRANCH" "$target" "open; main devs reply \`/release ${nv}\` there")"
+  overview "$(origin_of "$REPOSITORY" "$c")" "${REPOSITORY}#${num}" "$(fwd_line "$REPOSITORY" "$num" "$BRANCH" "$target" "open; main devs reply \`/merge\` there")"
 done
 exit $rc
