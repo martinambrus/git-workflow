@@ -127,7 +127,8 @@ containing `dev` and `bot`; you hold a `BOT_TOKEN`.
   ```
   ✅ prints `User admin was created successfully, api token: ...` — that is the **Packeton API token**; call it
   `PACKETON_TOKEN`. (Show it again any time: `wfb exec packeton app packagist:user:manager admin --show-token`.)
-- [ ] **2.2 Log in** at <http://packeton.test/login>. 📸 the empty home page and the *Profile* page (API token).
+- [ ] **2.2 Log in** at <http://packeton.test/login>. 📸 the empty home page and the *Profile* page. On this install the Profile page
+  shows no API token (finding 53): take the token from the CLI in 2.1.
 - [ ] **2.3 Anonymous access is off.**
   ```bash
   curl -s -o /dev/null -w '%{http_code}\n' http://packeton.test/packages.json     # 401
@@ -349,6 +350,14 @@ push to `main` is refused; a `dev` user cannot push a `v*` tag.
   `web/modules/custom/ait_banners` exists (`drupal-custom-module` lands there with the stock installer paths).
   ⚠ Finding 8: if Composer prints *"could not be fully loaded ... authentication"* it silently used stale cache —
   fix the token before going on. 📸 the require output.
+  ⚠ Finding 48: before any of the above, `ddev exec getent hosts packeton.test` must print the Packeton container's
+  address, not `127.0.0.1` (the overlay from 6.2 must be in place and the project restarted).
+  ⚠ Finding 49: `cache-read-only` alone is not enough: Composer still **reads** a shared cache when Packeton cannot be
+  reached. Put all three keys in the project's `composer.json`, by hand (`composer config` refuses them):
+  ```json
+  "config": { "cache-read-only": true, "cache-ttl": 0, "cache-files-ttl": 0 }
+  ```
+  Finding 50: the same three keys work in the global Composer config instead (on the machine or OS user that runs Composer).
 - [ ] **6.4 Install Drupal and enable the module:**
   ```bash
   mkdir -p config/sync

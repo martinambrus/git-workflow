@@ -1,6 +1,6 @@
 # Shared Drupal modules: developer workflow
 
-*Draft for the Elmont call | 8 October 2026, revised 13 October 2026 with the decisions in section 14, revised 14 October 2026 after the pilot lab, and 19 October 2026 (per-project Packeton users, the Packeton visibility check, forward-ports merged only): everything below ran against Gitea 28.1, Packeton, a Gitea Actions runner, Composer and two Drupal 11 projects, unless section 14 lists it as open. The evidence (findings 1 to 47) is in the lab's `README.md`; `manual/TASKLIST.md` is the step-by-step setup guide for Ops.*
+*Draft for the Elmont call | 8 October 2026, revised 13 October 2026 with the decisions in section 14, revised 14 October 2026 after the pilot lab, and 19 October 2026 (per-project Packeton users, the Packeton visibility check, forward-ports merged only): everything below ran against Gitea 28.1, Packeton, a Gitea Actions runner, Composer and two Drupal 11 projects, unless section 14 lists it as open. The evidence (findings 1 to 53) is in the lab's `README.md`; `manual/TASKLIST.md` is the step-by-step setup guide for Ops.*
 
 ## 1. The rules in one minute
 
@@ -58,6 +58,7 @@ Names in the examples: module `activit/ait_demo`, projects `shop-a` (on 1.x) and
 **2.3 Every developer machine.** Git with access to the project and module repositories, PHP, Composer and your usual local site setup. For Composer, create a Packeton token and add it with `composer config --global http-basic.<packeton-host> <username> <token>`. With DDEV, put it in `~/.ddev/homeadditions/.composer/auth.json` instead: DDEV copies it into every project's container on each start, while `ddev composer config --global` is lost on `ddev poweroff`. The token is only needed for `composer require` and `composer update`, never for cloning or running a project. A project has its own Packeton user and token (plan 10), kept in an `auth.json` in the project folder that is never committed; the shared token is the fallback for projects without one.
 
 - When Packeton answers 401 (a rotated or missing token), Composer prints one warning, uses its stale cache and **exits 0**: `composer update` then says "Nothing to modify" and a new release is never seen. If a release does not arrive, check the credentials first. CI jobs use a private cache and fail on that warning.
+- `cache-read-only` stops Composer from **writing** to the cache, not from **reading** it: with Packeton unreachable, a populated shared cache still installed a module that the project's group cannot see (lab findings 48–50). Every client that installs Packeton packages sets `cache-read-only`, `cache-ttl: 0` and `cache-files-ttl: 0`, either in its `composer.json` or in the global Composer config. With those keys the same install fails instead, and nothing is read from the cache.
 - Scripts and CI that drive `ddev` must close stdin (`</dev/null`): `ddev composer ...` started with an open, silent stdin hangs without printing anything.
 - A fresh clone has the code but no database: `drush si --existing-config` rebuilds the site from the committed `config/sync` (content is not preserved), or use the team's dump process.
 

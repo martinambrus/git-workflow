@@ -261,6 +261,34 @@ Update PRs, Checks, protected branches, Packeton grants). 78 assertions:
 47. **Packeton rejects a token sent under another user's name**, so the drift check's `COMPOSER_AUTH` has to name the
     project's own Packeton user, not the admin. ci-tools **v1.9.7** takes the Packeton user from `PACKETON_USER` (default `admin`); each project sets it
     in its `checks.yml` (manual 6.2b).
+48. **New Drupal projects without the `wf-net` overlay cannot reach Packeton** (drupal-d, drupal-e, drupal-f, 2026-10-19):
+    inside the DDEV web container `packeton.test` resolves to `127.0.0.1`, so `packages.json` returns 404 and Composer
+    fails. The overlay is in manual 6.2, but the script used for these three projects left it out. drupal-a, which has
+    it, resolves `packeton.test` to the Packeton container. Check with `ddev exec getent hosts packeton.test` before any
+    Composer step that needs Packeton.
+49. **`cache-read-only` stops writes, not reads** (2026-10-19): with Packeton unreachable and the shared Composer cache
+    filled by a writable client, `composer install` with `cache-read-only` set **succeeded** and installed
+    `activit/weather` v1.0.3, a version the project's group cannot see. Adding `cache-ttl: 0` and `cache-files-ttl: 0`
+    stops the reads: the same install then fails with `Failed to download activit/weather from dist ... 404`, with no
+    fallback, and the cache stays empty. Finding 8 is the 401 case of the same behaviour.
+50. **The three keys can be set globally** (2026-10-19): Composer reads `cache-read-only`, `cache-ttl` and
+    `cache-files-ttl` from its global `config.json`, and a project that does not set them picks them up. A project's
+    own `composer.json` overrides the global value. `composer config` refuses these keys, so write them into the
+    `config` block by hand. DDEV's Composer home is per container and is lost on `ddev poweroff` or a rebuild
+    (finding 9), so in the lab the global file is temporary. Tested: the keys read back globally; the full
+    populated-cache test was run with the keys in the project, not with the global file alone.
+51. **Install and update with the network up and the cache cleared** (2026-10-19): a committed project's install from its
+    lock installed 89 packages with 0 cache entries; a login whose group has `activit/weather2` resolved it at
+    `dev-main`; a login whose group lacks `activit/weather` was refused (`found activit/weather[v1.0.3] in the lock file
+    but not in remote repositories`). With the overlay in place, drupal-d's own `composer install` got 404 for the
+    `activit/weather` zipball and installed nothing, so the module is not reinstalled from the lock. That is the download
+    step, so the result stands on its own, without the listing.
+52. **`activit/weather2` has no release tag**: Packeton lists only `dev-main`, so the `^1.0` constraint in some projects
+    cannot resolve. A release tag is a release decision and has not been created.
+53. **The account token is not on the user's profile page in this install** (2026-10-19): `/users/<name>` shows no
+    credentials block, and `/users/<name>/tokens` lists personal access tokens, a separate list that is empty for these
+    users. The account token comes from `docker exec wfbare-packeton-1 app packagist:user:manager <name> --show-token`
+    (the line `Token: ...`). A token sent with another account's username returns 401 (finding 47).
 
 ## Fresh-machine replay (verified)
 
