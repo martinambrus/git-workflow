@@ -124,17 +124,37 @@ echo "::endgroup::"
 # --- 5. every locked activit/* version is visible to this project's own Packeton user ------------------------------
 # A frozen project (version limit or update-expiration date in Packeton) cannot list newer versions, but the lock's
 # dist URL still downloads them, so a pull request that moves the lock would pass the other checks. Fail it here.
+# On a pull request into main that does nothing else wrong, the pull request is closed with a comment (the branch is
+# kept, so it can be reopened once the project has access).
+listed() { curl -fsS -u "${PACKETON_USER}:${PACKETON_TOKEN}" "${PACKETON_URL}/p2/$1.json" 2>/dev/null \
+  | jq -r --arg n "$1" '.packages[$n][]?.version' | grep -cxF "$2"; }
 echo "::group::5 Packeton visibility (${PACKETON_USER})"
+frozen=""
 if [ -f composer.lock ]; then
-  nv=0
   while IFS=$'\t' read -r name ver; do
-    seen=$(curl -fsS -u "${PACKETON_USER}:${PACKETON_TOKEN}" "${PACKETON_URL}/p2/${name}.json" 2>/dev/null \
-      | jq -r --arg n "$name" '.packages[$n][]?.version' | grep -cxF "$ver")
-    [ "${seen:-0}" -gt 0 ] || { soft "$name $ver is locked but not listed for Packeton user ${PACKETON_USER} (frozen or outside its version limit)"; nv=1; }
+    seen=0
+    # a release that was just published may not be indexed yet: look again before calling it frozen
+    for try in 1 2 3; do seen=$(listed "$name" "$ver"); [ "${seen:-0}" -gt 0 ] && break; [ $try = 3 ] || sleep 20; done
+    [ "${seen:-0}" -gt 0 ] || frozen="${frozen:+$frozen, }$name $ver"
   done < <(jq -r '.packages[]|select(.name|startswith("activit/"))|select(.version|test("^dev-|-dev$")|not)|"\(.name)\t\(.version)"' composer.lock)
-  [ $nv = 0 ] && log "ok"
+  if [ -n "$frozen" ]; then soft "locked but not listed for Packeton user ${PACKETON_USER} (frozen or outside its version limit): $frozen"
+  else log "ok"; fi
 fi
 echo "::endgroup::"
+
+# the only failure of the whole run is this one, on a pull request into main: close it with the reason (reopen it when the
+# project has access). Anything else wrong keeps the pull request open, so the author sees all of it.
+if [ -n "$frozen" ] && [ $strict = 1 ] && [ "$EVENT" = pull_request ] && [ $fails = 1 ]; then
+  api="${GITEA_URL}/api/v1/repos/${REPOSITORY}"
+  num=$(curl -fsS -H "Authorization: token ${BOT_TOKEN}" "$api/pulls?state=open&limit=50" 2>/dev/null \
+    | jq -r --arg h "$BRANCH" '.[]|select(.head.ref==$h)|.number' | head -1)
+  if [ -n "$num" ]; then
+    body=$(jq -cn --arg p "$PACKETON_USER" --arg f "$frozen" '{body:("Closed automatically: the project `\($p)` has no access to \($f) in Packeton (its version limit or update-expiration date). The project can only take versions it can list there. The branch is kept: reopen this pull request once the project has access, then run the checks again.")}')
+    curl -fsS -H "Authorization: token ${BOT_TOKEN}" -H 'Content-Type: application/json' -X POST "$api/issues/$num/comments" -d "$body" >/dev/null \
+      && curl -fsS -H "Authorization: token ${BOT_TOKEN}" -H 'Content-Type: application/json' -X PATCH "$api/pulls/$num" -d '{"state":"closed"}' >/dev/null \
+      && log "closed pull request #$num (commented): no access to $frozen" || warn "could not close pull request #$num"
+  else warn "no open pull request for $BRANCH to close"; fi
+fi
 
 echo
 if [ $fails -gt 0 ]; then log "RESULT: $fails check(s) failed, $warns warning(s)"; exit 1; fi

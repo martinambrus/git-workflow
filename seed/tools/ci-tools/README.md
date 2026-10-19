@@ -125,6 +125,11 @@ rejected, so the Release job adds the release to that pull request instead of op
 but no committed `vendor/composer/installed.json` is a warning on feature branches and a failure on pull requests into
 `main` and on `main`: the drift check cannot compare the module folders without `vendor/`.
 
+**v1.9.9:** check 5 closes the pull request when it is the only failure: on a pull request into `main`, when the locked
+version is not listed for the project's Packeton user (after three looks, 20 seconds apart, in case the release is not
+indexed yet). The check comments with the reason and closes the pull request; the branch is kept, so it can be reopened
+once the project has access. Any other failure keeps the pull request open.
+
 **v1.9.8:** `bin/check-project.sh` check 5: every locked `activit/*` version must be listed for the project's own Packeton
 user (`PACKETON_USER`). A frozen project (version limit or update-expiration date) cannot list newer versions, but the
 dist URL in the lock still downloads them, so an update pull request that moved the lock passed every other check. It
