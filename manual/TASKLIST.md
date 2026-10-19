@@ -331,7 +331,7 @@ push to `main` is refused; a `dev` user cannot push a `v*` tag.
   3. Repo secret of `sites/shop-a` (it overrides the org secret): `PACKETON_TOKEN` = that user's API token, from
      `packagist:user:manager shop-a --show-token` (never pasted into a file that is committed).
   4. In the project's `checks.yml`, next to the token: `PACKETON_USER: shop-a` (ci-tools v1.9.7 and later; the default
-     is `admin`, which the project's token no longer matches).
+     is `admin`, which the project's token no longer matches). A pull request that moves the lock to a version this user cannot list fails the Packeton visibility check (`check 5`, ci-tools `v1.9.8`); when that is its only failure, the bot closes it with a comment (`v1.9.9`).
   5. In the project folder, git-ignored (add `auth.json` to `.git/info/exclude` or to the project's `.gitignore`), mode 600:
      `{ "http-basic": { "packeton.test": { "username": "shop-a", "password": "<token>" } } }`. DDEV's Composer reads it
      from the project root, so it takes precedence over the default file above.
@@ -568,17 +568,16 @@ and implements the new hook; only **shop-b** gets it.
 - [ ] **10.3 The forward-port.** Pushing to `1.x` triggered the **Forward-port** job: ✅ a PR
   `fwd/1.x/<sha>-to-main` ("Forward-port (1.x -> main): …") exists in the module repo. 📸 Its title and body.
   Let Checks run and merge it: the fix now exists on `main` too. The bot's comment on it offers `/merge` (merge only)
-  and `/release v2.0.x` (merge **and** release, 10.4 in one step); main devs can reply either.
+  and nothing else: a forward-port is merged, never released by itself (ci-tools `v1.9.11`), so 10.4 tags the release.
   *(If a `2.x` branch existed, it would target `2.x` first and then `main`: each merge triggers the next hop, and
-  each hop asks for its own `/release`.)*
+  each hop asks for `/merge`; the line that needs a release gets a tag, as in 10.4.)*
 - [ ] **10.4 It reaches the 2.x client with the next 2.x release:**
   ```bash
   cd $REPO/workspace/ait_banners && git switch main && git pull
   git tag -a v2.0.1 -m "2.0.1: includes the forwarded 1.x fix" && git push origin v2.0.1
   ```
   ✅ update PR `update/ait_banners-2.0.1` in **shop-b** only. Merge it. 📸
-  *(Or, instead of the tag commands: reply `/release v2.0.1` on the forward-port PR of 10.3. The bot tags the merge
-  commit and lists what the release contains.)*
+  *(The forward-port PR of 10.3 cannot release it: `/release` there is refused. Use the tag commands above.)*
 - [ ] **10.5 A fix that conflicts** (the 2.0 refactor touched the same line):
   ```bash
   git fetch origin && git switch -c fix/comment origin/1.x
@@ -674,15 +673,15 @@ into a merge request in the module repo.
   Only members of the `activit` **Owners** team (the main devs) can run the commands; anybody else gets "only main
   devs … can run": try it as `dev` if you like. (Merging the module MR in the module repo works too; the reminder
   then appears all the same.)
-  The Forward-port job opens its `fwd/1.x/...` PR into `main` with a prompt: reply there **`/release v2.0.y`** to merge
-  it and release it for the 2.x projects at once (the bot tags the merge commit and lists what the release contains;
-  shop-b then gets its update PR), or `/merge` to merge only (then the bot asks for `/release` on the merged PR). 📸
+  The Forward-port job opens its `fwd/1.x/...` PR into `main` with a prompt: reply there **`/merge`**. A forward-port is
+  never released by itself: the main dev tags the next 2.x release on `main` (the reminder names the version), and
+  shop-b then gets its update PR. 📸
   Back in shop-a's PR, a bot comment **"Where this change went"** lists every forward-port of the change with its
   state: open, merged, **released as `v2.0.y`**, or "does not apply cleanly" (with the issue). On every change it is
   posted again as the **last** comment of the PR (the previous copy is deleted). 📸
   Changes that touch only files outside the package (`.gitea/` workflows, `tests/`: `export-ignore`) are not
   released: their forward-port PR says "nothing to release, merge it", no reminder asks for `/release`, and
-  `/release` refuses when nothing in the package changed since the latest tag (no empty update PRs).
+  `/release` is refused on every forward-port, so no empty release can come from one.
   ⚠ If another in-place change to the **same lines** was merged into `1.x` since shop-a's release, `/merge` reports
   that Gitea refused the merge: the main dev resolves the conflict in the module MR. Ignore "This branch is
   out-of-date with the base branch" there: the bot branch is cut from the locked release on purpose.

@@ -247,6 +247,20 @@ Update PRs, Checks, protected branches, Packeton grants). 78 assertions:
     ci-tools **v1.8.6**: the Upstream job does not push when the remote bot branch already has the same parent and the
     same tree; `/merge` while Checks are still running asks Gitea to "merge when checks succeed" (verified on Gitea
     28.1: HTTP 201, merged by `bot` once the Checks passed, branch deleted); red Checks are still refused.
+44. **A frozen project's update passed every check** (drupal-b #27, 2026-10-19): the project's Packeton user could not
+    list the new version (its update-expiration date), but the dist URL in the lock still downloaded it, so the pull
+    request that moved the lock was green. ci-tools **v1.9.8** adds check 5 (every locked `activit/*` version must be
+    listed for the project's own Packeton user); **v1.9.9** closes the pull request with a comment when it is the only
+    failure (its branch kept), after three looks 20 seconds apart. drupal-b #22 had been closed by hand without a comment.
+45. **A project pinned back to an older line never got the release** on its own pull request: the Release job looked
+    only at the constraint on the project's default branch, so the pull request stayed red until someone ran
+    `composer update` by hand. ci-tools **v1.9.10**: an open pull request whose own constraint allows the release gets it.
+46. **A forward-port offered `/release` for the newer line** (weather #36): its change had already shipped on the
+    older line, so a release from its pull request only repeated it. ci-tools **v1.9.11**: a forward-port is merged
+    with `/merge`, `/release` on it is refused, and a merged forward-port gets no release prompt.
+47. **Packeton rejects a token sent under another user's name**, so the drift check's `COMPOSER_AUTH` has to name the
+    project's own Packeton user, not the admin. ci-tools **v1.9.7** takes the Packeton user from `PACKETON_USER` (default `admin`); each project sets it
+    in its `checks.yml` (manual 6.2b).
 
 ## Fresh-machine replay (verified)
 
@@ -395,7 +409,7 @@ Upstream job opens no second merge request for a change that is already merged b
 Since v1.7.0 the main devs drive it from the project PR: the bot's comments end with the exact reply, `/merge
 activit/<module>#<n>` (the bot merges the module MR) and then `/release activit/<module> v<x.y.z>` (the bot tags it;
 `commands.yml`, `bin/commands.sh`); only members of the module org's Owners team may run them (finding 40).
-Since v1.8.0 forward-port PRs ask for `/release v<x.y.z>` (merge + tag the merge commit) or `/merge`, and the
+Since v1.8.0 forward-port PRs asked for `/release v<x.y.z>` or `/merge`; since v1.9.11 they ask for `/merge` only (a forward-port is never released by itself, and `/release` on it is refused), and the
 project PR the change came from gets one "Where this change went" comment that tracks every hop (finding 41). The integrity check (module branch ==
 project folder) runs **before** the push. Re-running is safe.
 
